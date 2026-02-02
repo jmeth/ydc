@@ -4,6 +4,8 @@ A simple, browser-based tool for creating object detection datasets in YOLO form
 
 > **Note:** This project was vibecoded with [Claude](https://claude.ai) and is intended for **local/personal use only**. It has not been audited or tested for security and should not be deployed on public networks or in production environments.
 
+![screenshot](./screenshot.png)
+
 ## Features
 
 - **Image Import**: Upload images via file picker or drag-and-drop
