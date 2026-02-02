@@ -1,0 +1,20 @@
+services:
+  yolo-dataset-creator:
+    build: .
+    container_name: yolo-dataset-creator
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./datasets:/app/datasets
+    restart: unless-stopped
+    # Security: Drop all capabilities, add only what's needed
+    cap_drop:
+      - ALL
+    # Security: Read-only root filesystem (datasets volume is writable)
+    read_only: true
+    # Security: No privilege escalation
+    security_opt:
+      - no-new-privileges:true
+    # Temp directories needed by Python/Flask
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev

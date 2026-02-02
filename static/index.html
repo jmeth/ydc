@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Dataset Creator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1>YOLO Dataset Creator</h1>
+            <div class="dataset-selector">
+                <select id="dataset-select">
+                    <option value="">Select dataset...</option>
+                </select>
+                <button id="new-dataset-btn" class="btn btn-primary">New Dataset</button>
+                <button id="export-btn" class="btn" disabled>Export ZIP</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Sidebar - Image Browser -->
+            <aside class="sidebar sidebar-left">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Images</h3>
+                        <div class="image-actions">
+                            <button id="upload-btn" class="btn btn-small">Upload</button>
+                            <button id="webcam-btn" class="btn btn-small">Webcam</button>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div id="image-list" class="image-list">
+                            <p class="empty-message">Select a dataset to view images</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center - Canvas Editor -->
+            <main class="editor-area">
+                <div class="toolbar">
+                    <div class="tool-group">
+                        <button id="tool-select" class="tool-btn active" title="Select (V)">
+                            <span class="icon">&#9654;</span>
+                        </button>
+                        <button id="tool-draw" class="tool-btn" title="Draw Box (N)">
+                            <span class="icon">&#9633;</span>
+                        </button>
+                    </div>
+                    <div class="tool-group">
+                        <button id="zoom-in" class="tool-btn" title="Zoom In (+)">+</button>
+                        <span id="zoom-level">100%</span>
+                        <button id="zoom-out" class="tool-btn" title="Zoom Out (-)">-</button>
+                        <button id="zoom-fit" class="tool-btn" title="Fit to View">Fit</button>
+                    </div>
+                    <div class="tool-group">
+                        <button id="delete-box" class="tool-btn" title="Delete Selected (Del)">
+                            <span class="icon">&#10005;</span>
+                        </button>
+                        <button id="clear-all" class="tool-btn" title="Clear All Boxes">Clear</button>
+                    </div>
+                    <div class="tool-group split-selector">
+                        <label>Split:</label>
+                        <select id="split-select">
+                            <option value="train">Train</option>
+                            <option value="val">Val</option>
+                            <option value="test">Test</option>
+                        </select>
+                    </div>
+                    <button id="save-btn" class="btn btn-primary" title="Save (Ctrl+S)">Save</button>
+                </div>
+
+                <div class="canvas-container" id="canvas-container">
+                    <canvas id="editor-canvas"></canvas>
+                    <div id="no-image-message" class="no-image-message">
+                        <p>No image selected</p>
+                        <p class="hint">Upload an image or select one from the list</p>
+                    </div>
+                </div>
+
+                <div class="status-bar">
+                    <span id="status-message">Ready</span>
+                    <span id="cursor-position"></span>
+                </div>
+            </main>
+
+            <!-- Right Sidebar - Labels -->
+            <aside class="sidebar sidebar-right">
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Labels</h3>
+                        <button id="add-label-btn" class="btn btn-small">+ Add</button>
+                    </div>
+                    <div class="panel-content">
+                        <div id="label-list" class="label-list">
+                            <p class="empty-message">No labels defined</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Annotations</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div id="annotation-list" class="annotation-list">
+                            <p class="empty-message">No annotations</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3>Shortcuts</h3>
+                    </div>
+                    <div class="panel-content shortcuts-panel">
+                        <div class="shortcut"><kbd>1-9</kbd> Select/Change label</div>
+                        <div class="shortcut"><kbd>N</kbd> Draw mode</div>
+                        <div class="shortcut"><kbd>V</kbd> Select mode</div>
+                        <div class="shortcut"><kbd>W</kbd> Webcam capture</div>
+                        <div class="shortcut"><kbd>Del</kbd> Delete box</div>
+                        <div class="shortcut"><kbd>Ctrl+S</kbd> Save</div>
+                        <div class="shortcut"><kbd>&larr; &rarr;</kbd> Prev/Next image</div>
+                        <div class="shortcut"><kbd>Esc</kbd> Cancel/Deselect</div>
+                        <div class="shortcut-divider"></div>
+                        <div class="shortcut-hint">Drag box to move</div>
+                        <div class="shortcut-hint">Drag handles to resize</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <!-- New Dataset Modal -->
+        <div id="new-dataset-modal" class="modal hidden">
+            <div class="modal-header">
+                <h3>Create New Dataset</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="dataset-name">Dataset Name</label>
+                    <input type="text" id="dataset-name" placeholder="my_dataset">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="cancel-dataset">Cancel</button>
+                <button class="btn btn-primary" id="create-dataset">Create</button>
+            </div>
+        </div>
+
+        <!-- Add Label Modal -->
+        <div id="add-label-modal" class="modal hidden">
+            <div class="modal-header">
+                <h3>Add Label</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="label-name">Label Name</label>
+                    <input type="text" id="label-name" placeholder="e.g., person, car, dog">
+                </div>
+                <div class="form-group">
+                    <label for="label-color">Color</label>
+                    <input type="color" id="label-color" value="#ff0000">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="cancel-label">Cancel</button>
+                <button class="btn btn-primary" id="create-label">Add</button>
+            </div>
+        </div>
+
+        <!-- Webcam Modal -->
+        <div id="webcam-modal" class="modal hidden">
+            <div class="modal-header">
+                <h3>Capture from Webcam</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body webcam-body">
+                <video id="webcam-video" autoplay playsinline></video>
+                <canvas id="webcam-canvas" class="hidden"></canvas>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="cancel-webcam">Cancel</button>
+                <button class="btn btn-primary" id="capture-webcam">Capture</button>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div id="export-modal" class="modal hidden">
+            <div class="modal-header">
+                <h3>Export Dataset</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="export-info">
+                    <p>Loading dataset info...</p>
+                </div>
+                <div id="export-warning" class="export-warning hidden">
+                    <strong>Warning:</strong> Large datasets may take time to download.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="cancel-export">Cancel</button>
+                <button class="btn btn-primary" id="confirm-export">Download ZIP</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="file-input" accept="image/*" multiple class="hidden">
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
