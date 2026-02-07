@@ -41,7 +41,9 @@ yolo_dataset_creator/
 └── CLAUDE.md
 ```
 
-### Detailed Architecture 
+### Detailed Architecture
 
-See docs/ARCHITECTURE.md and docs/SPEC.md for more details.
+See docs/ARCHITECTURE.md for top-level design, subsystem interactions, and implementation phases.
+Subsystem-specific architecture is in docs/architecture/ (api-gateway, feeds, dataset, training, inference, notifications, authentication, persistence, frontend).
+See docs/SPEC.md for product specification.
 
