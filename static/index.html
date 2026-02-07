@@ -16,6 +16,7 @@
                     <option value="">Select dataset...</option>
                 </select>
                 <button id="new-dataset-btn" class="btn btn-primary">New Dataset</button>
+                <button id="import-btn" class="btn">Import ZIP</button>
                 <button id="export-btn" class="btn" disabled>Export ZIP</button>
             </div>
         </header>
@@ -58,10 +59,15 @@
                         <button id="zoom-fit" class="tool-btn" title="Fit to View">Fit</button>
                     </div>
                     <div class="tool-group">
-                        <button id="delete-box" class="tool-btn" title="Delete Selected (Del)">
+                        <button id="delete-box" class="tool-btn" title="Delete Selected Box (Del)">
                             <span class="icon">&#10005;</span>
                         </button>
                         <button id="clear-all" class="tool-btn" title="Clear All Boxes">Clear</button>
+                    </div>
+                    <div class="tool-group">
+                        <button id="delete-image" class="tool-btn tool-btn-danger" title="Delete Image (Shift+Del)">
+                            Delete Image
+                        </button>
                     </div>
                     <div class="tool-group split-selector">
                         <label>Split:</label>
@@ -123,6 +129,7 @@
                         <div class="shortcut"><kbd>V</kbd> Select mode</div>
                         <div class="shortcut"><kbd>W</kbd> Webcam capture</div>
                         <div class="shortcut"><kbd>Del</kbd> Delete box</div>
+                        <div class="shortcut"><kbd>Shift+Del</kbd> Delete image</div>
                         <div class="shortcut"><kbd>Ctrl+S</kbd> Save</div>
                         <div class="shortcut"><kbd>&larr; &rarr;</kbd> Prev/Next image</div>
                         <div class="shortcut"><kbd>Esc</kbd> Cancel/Deselect</div>
@@ -210,6 +217,32 @@
             <div class="modal-footer">
                 <button class="btn" id="cancel-export">Cancel</button>
                 <button class="btn btn-primary" id="confirm-export">Download ZIP</button>
+            </div>
+        </div>
+
+        <!-- Import Modal -->
+        <div id="import-modal" class="modal hidden">
+            <div class="modal-header">
+                <h3>Import Dataset</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Upload a YOLO-format dataset zip file. The zip should contain:</p>
+                <ul class="import-requirements">
+                    <li><code>data.yaml</code> - Dataset configuration</li>
+                    <li><code>images/</code> - Image files (train/val/test subdirs)</li>
+                    <li><code>labels/</code> - Label files (train/val/test subdirs)</li>
+                </ul>
+                <div class="import-dropzone" id="import-dropzone">
+                    <p>Drag & drop a .zip file here</p>
+                    <p class="hint">or click to browse</p>
+                    <input type="file" id="import-file-input" accept=".zip" class="hidden">
+                </div>
+                <div id="import-status" class="import-status hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="cancel-import">Cancel</button>
+                <button class="btn btn-primary" id="confirm-import" disabled>Import</button>
             </div>
         </div>
     </div>

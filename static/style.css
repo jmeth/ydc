@@ -263,6 +263,19 @@ input[type="color"] {
     font-size: 16px;
 }
 
+.tool-btn-danger {
+    width: auto;
+    padding: 0 10px;
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    font-size: 11px;
+}
+
+.tool-btn-danger:hover {
+    background: var(--danger-color);
+    color: white;
+}
+
 #zoom-level {
     min-width: 50px;
     text-align: center;
@@ -690,6 +703,78 @@ kbd {
 
 .export-size-large {
     color: var(--warning-color);
+}
+
+/* Import Modal */
+.import-requirements {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 12px 0;
+    padding-left: 20px;
+}
+
+.import-requirements li {
+    margin-bottom: 4px;
+}
+
+.import-requirements code {
+    background: var(--bg-tertiary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.import-dropzone {
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+}
+
+.import-dropzone:hover {
+    border-color: var(--accent-color);
+    background: rgba(0, 120, 212, 0.05);
+}
+
+.import-dropzone.drag-over {
+    border-color: var(--accent-color);
+    background: rgba(0, 120, 212, 0.1);
+}
+
+.import-dropzone p {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.import-dropzone .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.import-dropzone .selected-file {
+    font-weight: 500;
+    color: var(--accent-color);
+}
+
+.import-status {
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--bg-tertiary);
+}
+
+.import-status.error {
+    background: rgba(244, 67, 54, 0.15);
+    color: var(--danger-color);
+}
+
+#import-modal {
+    min-width: 420px;
 }
 
 /* ============ Drag and Drop ============ */

@@ -54,6 +54,7 @@ const elements = {
     zoomLevel: document.getElementById('zoom-level'),
     deleteBox: document.getElementById('delete-box'),
     clearAll: document.getElementById('clear-all'),
+    deleteImage: document.getElementById('delete-image'),
     splitSelect: document.getElementById('split-select'),
     saveBtn: document.getElementById('save-btn'),
     statusMessage: document.getElementById('status-message'),
@@ -82,6 +83,14 @@ const elements = {
     exportWarning: document.getElementById('export-warning'),
     confirmExportBtn: document.getElementById('confirm-export'),
     cancelExportBtn: document.getElementById('cancel-export'),
+    // Import
+    importBtn: document.getElementById('import-btn'),
+    importModal: document.getElementById('import-modal'),
+    importDropzone: document.getElementById('import-dropzone'),
+    importFileInput: document.getElementById('import-file-input'),
+    importStatus: document.getElementById('import-status'),
+    confirmImportBtn: document.getElementById('confirm-import'),
+    cancelImportBtn: document.getElementById('cancel-import'),
 };
 
 const ctx = elements.canvas.getContext('2d');
@@ -169,6 +178,16 @@ const api = {
 
     getExportUrl(name) {
         return `/api/datasets/${name}/export`;
+    },
+
+    async importDataset(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/datasets/import', {
+            method: 'POST',
+            body: formData
+        });
+        return res.json();
     }
 };
 
@@ -259,6 +278,31 @@ function setupEventListeners() {
     elements.confirmExportBtn.addEventListener('click', confirmExport);
     elements.cancelExportBtn.addEventListener('click', () => hideModal());
 
+    // Import
+    elements.importBtn.addEventListener('click', openImportModal);
+    elements.confirmImportBtn.addEventListener('click', confirmImport);
+    elements.cancelImportBtn.addEventListener('click', () => {
+        selectedImportFile = null;
+        hideModal();
+    });
+    elements.importDropzone.addEventListener('click', () => elements.importFileInput.click());
+    elements.importFileInput.addEventListener('change', handleImportFileSelect);
+    elements.importDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        elements.importDropzone.classList.add('drag-over');
+    });
+    elements.importDropzone.addEventListener('dragleave', () => {
+        elements.importDropzone.classList.remove('drag-over');
+    });
+    elements.importDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        elements.importDropzone.classList.remove('drag-over');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.zip'));
+        if (files.length > 0) {
+            handleImportFile(files[0]);
+        }
+    });
+
     // Tools
     elements.toolSelect.addEventListener('click', () => setTool('select'));
     elements.toolDraw.addEventListener('click', () => setTool('draw'));
@@ -267,6 +311,7 @@ function setupEventListeners() {
     elements.zoomFit.addEventListener('click', fitToView);
     elements.deleteBox.addEventListener('click', deleteSelectedAnnotation);
     elements.clearAll.addEventListener('click', clearAllAnnotations);
+    elements.deleteImage.addEventListener('click', deleteCurrentImage);
     elements.saveBtn.addEventListener('click', saveAnnotations);
 
     // Split change
@@ -311,8 +356,10 @@ function setupKeyboardShortcuts() {
                 break;
             case 'delete':
             case 'backspace':
-                if (state.selectedAnnotation !== null) {
-                    e.preventDefault();
+                e.preventDefault();
+                if (e.shiftKey) {
+                    deleteCurrentImage();
+                } else if (state.selectedAnnotation !== null) {
                     deleteSelectedAnnotation();
                 }
                 break;
@@ -682,6 +729,85 @@ function confirmExport() {
     document.body.removeChild(link);
 
     setStatus('Download started');
+}
+
+// ============ Import Functions ============
+let selectedImportFile = null;
+
+function openImportModal() {
+    selectedImportFile = null;
+    elements.importFileInput.value = '';
+    elements.importStatus.classList.add('hidden');
+    elements.importStatus.textContent = '';
+    elements.confirmImportBtn.disabled = true;
+    elements.importDropzone.innerHTML = `
+        <p>Drag & drop a .zip file here</p>
+        <p class="hint">or click to browse</p>
+    `;
+    showModal('import');
+}
+
+function handleImportFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        handleImportFile(file);
+    }
+}
+
+function handleImportFile(file) {
+    if (!file.name.endsWith('.zip')) {
+        elements.importStatus.textContent = 'Please select a .zip file';
+        elements.importStatus.classList.remove('hidden');
+        elements.importStatus.classList.add('error');
+        return;
+    }
+
+    selectedImportFile = file;
+    elements.importDropzone.innerHTML = `
+        <p class="selected-file">${file.name}</p>
+        <p class="hint">${formatSize(file.size)}</p>
+    `;
+    elements.importStatus.classList.add('hidden');
+    elements.confirmImportBtn.disabled = false;
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
+async function confirmImport() {
+    if (!selectedImportFile) return;
+
+    elements.confirmImportBtn.disabled = true;
+    elements.importStatus.textContent = 'Importing dataset...';
+    elements.importStatus.classList.remove('hidden', 'error');
+
+    try {
+        const result = await api.importDataset(selectedImportFile);
+
+        if (result.error) {
+            elements.importStatus.textContent = result.error;
+            elements.importStatus.classList.add('error');
+            elements.confirmImportBtn.disabled = false;
+            return;
+        }
+
+        // Success - reload datasets and select the new one
+        await loadDatasets();
+        elements.datasetSelect.value = result.name;
+        await selectDataset(result.name);
+
+        hideModal();
+        selectedImportFile = null;
+        setStatus(`Imported dataset: ${result.name} (${result.imageCount} images)`);
+    } catch (err) {
+        elements.importStatus.textContent = 'Import failed: ' + err.message;
+        elements.importStatus.classList.add('error');
+        elements.confirmImportBtn.disabled = false;
+    }
 }
 
 // ============ Annotation Functions ============
@@ -1296,6 +1422,8 @@ function showModal(type) {
         elements.webcamModal.classList.remove('hidden');
     } else if (type === 'export') {
         elements.exportModal.classList.remove('hidden');
+    } else if (type === 'import') {
+        elements.importModal.classList.remove('hidden');
     }
 }
 

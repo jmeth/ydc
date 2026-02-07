@@ -156,6 +156,125 @@ def create_dataset():
     }), 201
 
 
+@app.route('/api/datasets/import', methods=['POST'])
+def import_dataset():
+    """Import a dataset from a zip file."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not file.filename.endswith('.zip'):
+        return jsonify({'error': 'File must be a .zip archive'}), 400
+
+    try:
+        # Read zip into memory
+        zip_data = io.BytesIO(file.read())
+
+        with zipfile.ZipFile(zip_data, 'r') as zf:
+            # Get list of files in zip
+            namelist = zf.namelist()
+
+            # Try to detect the dataset structure
+            # Could be: dataset_name/data.yaml or data.yaml at root
+            root_prefix = ''
+            data_yaml_path = None
+
+            for name in namelist:
+                if name.endswith('data.yaml'):
+                    data_yaml_path = name
+                    # Get the directory containing data.yaml
+                    parts = name.split('/')
+                    if len(parts) > 1:
+                        root_prefix = parts[0] + '/'
+                    break
+
+            if not data_yaml_path:
+                return jsonify({'error': 'No data.yaml found in zip. Not a valid YOLO dataset.'}), 400
+
+            # Read and parse data.yaml
+            with zf.open(data_yaml_path) as f:
+                config = yaml.safe_load(f)
+
+            # Determine dataset name
+            if root_prefix:
+                dataset_name = root_prefix.rstrip('/')
+            else:
+                # Use filename without extension
+                dataset_name = Path(file.filename).stem
+
+            # Sanitize name
+            dataset_name = ''.join(c for c in dataset_name if c.isalnum() or c in '-_')
+
+            # Check if dataset already exists
+            dataset_path = get_dataset_path(dataset_name)
+            if dataset_path.exists():
+                return jsonify({'error': f'Dataset "{dataset_name}" already exists'}), 400
+
+            # Create dataset structure
+            create_dataset_structure(dataset_path)
+
+            # Extract images and labels
+            image_count = 0
+            for name in namelist:
+                # Skip directories
+                if name.endswith('/'):
+                    continue
+
+                # Remove root prefix if present
+                rel_path = name
+                if root_prefix and name.startswith(root_prefix):
+                    rel_path = name[len(root_prefix):]
+
+                # Check if it's an image or label file in the expected structure
+                if rel_path.startswith('images/') or rel_path.startswith('labels/'):
+                    # Determine target path
+                    target_path = dataset_path / rel_path
+
+                    # Create parent directory if needed
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Extract file
+                    with zf.open(name) as src:
+                        with open(target_path, 'wb') as dst:
+                            dst.write(src.read())
+
+                    if rel_path.startswith('images/') and allowed_file(rel_path):
+                        image_count += 1
+
+            # Update and save config
+            config['path'] = str(dataset_path.absolute())
+            config['train'] = 'images/train'
+            config['val'] = 'images/val'
+            config['test'] = 'images/test'
+
+            # Ensure names is a dict
+            if 'names' not in config:
+                config['names'] = {}
+            elif isinstance(config['names'], list):
+                config['names'] = {i: name for i, name in enumerate(config['names'])}
+
+            if 'nc' not in config:
+                config['nc'] = len(config['names'])
+
+            save_dataset_config(dataset_path, config)
+
+            return jsonify({
+                'name': dataset_name,
+                'classes': config['names'],
+                'imageCount': image_count
+            }), 201
+
+    except zipfile.BadZipFile:
+        return jsonify({'error': 'Invalid zip file'}), 400
+    except yaml.YAMLError as e:
+        return jsonify({'error': f'Invalid data.yaml: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+
+
 @app.route('/api/datasets/<name>', methods=['GET'])
 def get_dataset(name):
     """Get dataset information."""
