@@ -6,6 +6,7 @@ router registrations. Run with: uvicorn backend.main:app --reload --port 8000
 """
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,14 @@ from backend.websocket import video, events
 async def lifespan(app: FastAPI):
     """Manage startup and shutdown of shared resources."""
     await event_bus.start()
+
+    # Initialize persistence layer
+    from backend.persistence import create_stores, set_stores
+    stores = create_stores(
+        data_dir=Path(settings.data_dir),
+        models_dir=Path(settings.models_dir),
+    )
+    set_stores(stores)
 
     # Initialize feeds subsystem
     feed_manager = FeedManager()
@@ -79,6 +88,7 @@ async def lifespan(app: FastAPI):
     await feed_streamer.stop()
     inference_manager.stop_all()
     feed_manager.shutdown()
+    set_stores(None)
     await event_bus.stop()
 
 
