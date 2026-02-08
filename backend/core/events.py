@@ -41,6 +41,11 @@ INFERENCE_STARTED = "inference.started"
 INFERENCE_STOPPED = "inference.stopped"
 INFERENCE_ERROR = "inference.error"
 
+DATASET_CREATED = "dataset.created"
+DATASET_DELETED = "dataset.deleted"
+DATASET_IMAGE_ADDED = "dataset.image_added"
+DATASET_IMAGE_DELETED = "dataset.image_deleted"
+
 
 class EventBus:
     """
