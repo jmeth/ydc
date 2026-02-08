@@ -3,8 +3,9 @@ Shared test fixtures for backend unit tests.
 
 Provides an async HTTP client (via httpx) for testing FastAPI
 endpoints, a fresh EventBus instance per test, a
-NotificationManager wired to a mock ConnectionManager, and an
-InferenceManager wired to a mock FeedManager.
+NotificationManager wired to a mock ConnectionManager, an
+InferenceManager wired to a mock FeedManager, and persistence
+Stores backed by a tmp_path directory.
 """
 
 import pytest
@@ -95,3 +96,22 @@ def inference_manager():
         yield mgr
 
     set_inference_manager(None)
+
+
+@pytest.fixture
+def persistence_stores(tmp_path):
+    """
+    Persistence Stores backed by a tmp_path directory.
+
+    Creates all four stores via the factory and injects them into the
+    module-level singleton. Cleans up by resetting to None.
+    """
+    from backend.persistence import create_stores, set_stores
+
+    stores = create_stores(
+        data_dir=tmp_path / "datasets",
+        models_dir=tmp_path / "models",
+    )
+    set_stores(stores)
+    yield stores
+    set_stores(None)
