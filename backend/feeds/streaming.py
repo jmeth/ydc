@@ -4,20 +4,56 @@ Async feed streamer for broadcasting video frames over WebSocket.
 FeedStreamer runs a monitor task that watches ConnectionManager for
 feed subscriptions, then starts/stops per-feed stream tasks that poll
 RingBuffers and broadcast JPEG-encoded frames at a target FPS.
+
+Supports both raw Frame and InferenceFrame objects. InferenceFrame
+nests the image data under .frame.data and carries detections, which
+are forwarded to WebSocket clients alongside the encoded image.
 """
 
 import asyncio
 import base64
 import logging
 import time
+from typing import Any
 
 import cv2
 import numpy as np
 
 from backend.feeds.manager import FeedManager
+from backend.feeds.models import InferenceFrame
 from backend.websocket.manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
+
+
+def _unpack_frame(frame: Any) -> tuple[np.ndarray, int, list[dict[str, Any]] | None]:
+    """
+    Extract image data, frame number, and detections from a frame object.
+
+    Handles both plain Frame (data/frame_number at top level) and
+    InferenceFrame (data nested under .frame, with .detections list).
+
+    Args:
+        frame: A Frame or InferenceFrame object.
+
+    Returns:
+        Tuple of (image_data, frame_number, detections_or_None).
+        detections is a list of dicts when the frame is an InferenceFrame,
+        or None for a plain Frame.
+    """
+    if isinstance(frame, InferenceFrame):
+        detections = [
+            {
+                "class_name": d.class_name,
+                "confidence": d.confidence,
+                "bbox": d.bbox,
+                "class_id": d.class_id,
+            }
+            for d in frame.detections
+        ]
+        return frame.frame.data, frame.frame.frame_number, detections
+
+    return frame.data, frame.frame_number, None
 
 
 class FeedStreamer:
@@ -133,7 +169,8 @@ class FeedStreamer:
         Poll the feed buffer at target FPS and broadcast encoded frames.
 
         Runs until cancelled. Skips frames if encoding fails or no new
-        frame is available.
+        frame is available. For InferenceFrame objects, extracts detections
+        and forwards them alongside the encoded image.
 
         Args:
             feed_id: The feed to stream from
@@ -149,11 +186,15 @@ class FeedStreamer:
                 break
 
             frame = buf.get_latest()
-            if frame is not None and frame.frame_number != last_frame_num:
-                last_frame_num = frame.frame_number
-                encoded = self._encode_frame(frame.data)
-                if encoded:
-                    await self._connection_manager.broadcast_to_feed(feed_id, encoded)
+            if frame is not None:
+                data, frame_number, detections = _unpack_frame(frame)
+                if frame_number != last_frame_num:
+                    last_frame_num = frame_number
+                    encoded = self._encode_frame(data)
+                    if encoded:
+                        await self._connection_manager.broadcast_to_feed(
+                            feed_id, encoded, detections=detections,
+                        )
 
             # Sleep for the remainder of the interval
             elapsed = time.monotonic() - start
