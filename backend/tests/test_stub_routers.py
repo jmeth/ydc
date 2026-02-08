@@ -52,11 +52,7 @@ STUB_ENDPOINTS = [
     ("DELETE", "/api/models/test-model"),
     ("PUT", "/api/models/test-model/activate"),
     ("POST", "/api/models/test-model/export"),
-    # Notifications
-    ("GET", "/api/notifications"),
-    ("POST", "/api/notifications/test-id/read"),
-    ("POST", "/api/notifications/test-id/dismiss"),
-    ("DELETE", "/api/notifications"),
+    # Notifications endpoints removed — now implemented (see test_notifications_api.py)
     # System (resources is a stub)
     ("PUT", "/api/system/config"),
     ("GET", "/api/system/resources"),

@@ -21,6 +21,7 @@ from backend.core.exceptions import (
 )
 from backend.feeds.manager import FeedManager
 from backend.feeds.streaming import FeedStreamer
+from backend.notifications.manager import NotificationManager
 from backend.websocket.manager import connection_manager
 from backend.models.common import StatusResponse, ErrorResponse
 
@@ -52,6 +53,13 @@ async def lifespan(app: FastAPI):
     # Inject FeedManager into the API router
     from backend.api.feeds import set_feed_manager
     set_feed_manager(feed_manager)
+
+    # Initialize notifications subsystem
+    notification_manager = NotificationManager(connection_manager)
+    notification_manager.setup_event_subscriptions(event_bus)
+
+    from backend.api.notifications import set_notification_manager
+    set_notification_manager(notification_manager)
 
     await feed_streamer.start()
 
