@@ -9,13 +9,8 @@ import pytest
 
 
 # All stub endpoints: (method, path)
+# Feeds endpoints removed — now implemented (see test_feeds_api.py)
 STUB_ENDPOINTS = [
-    # Feeds
-    ("GET", "/api/feeds"),
-    ("GET", "/api/feeds/test-feed"),
-    ("POST", "/api/feeds"),
-    ("PUT", "/api/feeds/test-feed"),
-    ("DELETE", "/api/feeds/test-feed"),
     # Inference
     ("POST", "/api/inference/start"),
     ("POST", "/api/inference/stop"),

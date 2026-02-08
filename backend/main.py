@@ -19,6 +19,9 @@ from backend.core.exceptions import (
     ValidationError,
     SubsystemError,
 )
+from backend.feeds.manager import FeedManager
+from backend.feeds.streaming import FeedStreamer
+from backend.websocket.manager import connection_manager
 from backend.models.common import StatusResponse, ErrorResponse
 
 # API routers
@@ -36,7 +39,26 @@ from backend.websocket import video, events
 async def lifespan(app: FastAPI):
     """Manage startup and shutdown of shared resources."""
     await event_bus.start()
+
+    # Initialize feeds subsystem
+    feed_manager = FeedManager()
+    feed_streamer = FeedStreamer(
+        feed_manager=feed_manager,
+        connection_manager=connection_manager,
+        stream_fps=settings.feed_stream_fps,
+        jpeg_quality=settings.feed_jpeg_quality,
+    )
+
+    # Inject FeedManager into the API router
+    from backend.api.feeds import set_feed_manager
+    set_feed_manager(feed_manager)
+
+    await feed_streamer.start()
+
     yield
+
+    await feed_streamer.stop()
+    feed_manager.shutdown()
     await event_bus.stop()
 
 

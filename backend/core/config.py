@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     negative_ratio: float = Field(default=0.2, description="Default negative frame capture ratio")
     confidence_threshold: float = Field(default=0.3, description="Default detection confidence threshold")
 
+    # Feed defaults
+    feed_stream_fps: float = Field(default=15.0, description="Target FPS for WebSocket frame streaming")
+    feed_jpeg_quality: int = Field(default=70, description="JPEG compression quality (0-100) for streamed frames")
+    feed_default_buffer_size: int = Field(default=30, description="Default ring buffer size per feed")
+
     # Training defaults
     training_epochs: int = Field(default=100, description="Default training epochs")
     training_batch_size: int = Field(default=16, description="Default training batch size")
