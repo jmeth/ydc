@@ -22,6 +22,10 @@ from backend.core.events import (
     INFERENCE_STARTED,
     INFERENCE_STOPPED,
     INFERENCE_ERROR,
+    DATASET_CREATED,
+    DATASET_DELETED,
+    DATASET_IMAGE_ADDED,
+    DATASET_IMAGE_DELETED,
 )
 from backend.notifications.models import (
     Notification,
@@ -72,6 +76,10 @@ class NotificationManager:
         event_bus.subscribe(INFERENCE_STARTED, self._on_inference_started)
         event_bus.subscribe(INFERENCE_STOPPED, self._on_inference_stopped)
         event_bus.subscribe(INFERENCE_ERROR, self._on_inference_error)
+        event_bus.subscribe(DATASET_CREATED, self._on_dataset_created)
+        event_bus.subscribe(DATASET_DELETED, self._on_dataset_deleted)
+        event_bus.subscribe(DATASET_IMAGE_ADDED, self._on_dataset_image_added)
+        event_bus.subscribe(DATASET_IMAGE_DELETED, self._on_dataset_image_deleted)
         logger.info("Notification event subscriptions registered")
 
     async def notify(
@@ -314,5 +322,56 @@ class NotificationManager:
             category=NotificationCategory.INFERENCE,
             title="Inference Error",
             message=data.get("message", "An error occurred during inference."),
+            data=data,
+        )
+
+    async def _on_dataset_created(self, data: dict[str, Any]) -> None:
+        """Handle dataset.created event."""
+        name = data.get("name", "Unknown")
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.SUCCESS,
+            category=NotificationCategory.DATASET,
+            title="Dataset Created",
+            message=f"Dataset '{name}' has been created.",
+            data=data,
+        )
+
+    async def _on_dataset_deleted(self, data: dict[str, Any]) -> None:
+        """Handle dataset.deleted event."""
+        name = data.get("name", "Unknown")
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.DATASET,
+            title="Dataset Deleted",
+            message=f"Dataset '{name}' has been deleted.",
+            data=data,
+        )
+
+    async def _on_dataset_image_added(self, data: dict[str, Any]) -> None:
+        """Handle dataset.image_added event."""
+        name = data.get("name", "Unknown")
+        filename = data.get("filename", "Unknown")
+        split = data.get("split", "Unknown")
+        await self.notify(
+            type=NotificationType.STATUS,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.DATASET,
+            title="Image Added",
+            message=f"Image '{filename}' added to {name}/{split}.",
+            data=data,
+        )
+
+    async def _on_dataset_image_deleted(self, data: dict[str, Any]) -> None:
+        """Handle dataset.image_deleted event."""
+        name = data.get("name", "Unknown")
+        filename = data.get("filename", "Unknown")
+        await self.notify(
+            type=NotificationType.STATUS,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.DATASET,
+            title="Image Deleted",
+            message=f"Image '{filename}' removed from dataset '{name}'.",
             data=data,
         )

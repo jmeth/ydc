@@ -18,24 +18,10 @@ STUB_ENDPOINTS = [
     ("GET", "/api/capture/status"),
     ("POST", "/api/capture/trigger"),
     ("PUT", "/api/capture/config"),
-    # Datasets
-    ("GET", "/api/datasets"),
-    ("POST", "/api/datasets"),
-    ("POST", "/api/datasets/import"),
-    ("GET", "/api/datasets/test-ds"),
-    ("PUT", "/api/datasets/test-ds"),
-    ("DELETE", "/api/datasets/test-ds"),
-    ("GET", "/api/datasets/test-ds/export"),
-    ("GET", "/api/datasets/test-ds/images"),
-    ("POST", "/api/datasets/test-ds/images"),
-    ("DELETE", "/api/datasets/test-ds/images/train/img.jpg"),
-    ("GET", "/api/datasets/test-ds/labels/train/img.txt"),
-    ("PUT", "/api/datasets/test-ds/labels/train/img.txt"),
-    ("PUT", "/api/datasets/test-ds/split/train/img.jpg"),
+    # Datasets (most endpoints now implemented — see test_dataset_api.py)
+    # Review queue stubs remain
     ("GET", "/api/datasets/test-ds/review"),
     ("POST", "/api/datasets/test-ds/review/bulk"),
-    ("GET", "/api/datasets/test-ds/prompts"),
-    ("PUT", "/api/datasets/test-ds/prompts"),
     # Training
     ("POST", "/api/training/start"),
     ("POST", "/api/training/stop"),

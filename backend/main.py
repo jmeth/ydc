@@ -81,6 +81,19 @@ async def lifespan(app: FastAPI):
     from backend.api.inference import set_inference_manager
     set_inference_manager(inference_manager)
 
+    # Initialize dataset subsystem
+    from backend.dataset import set_dataset_manager
+    from backend.dataset.manager import DatasetManager
+    from backend.persistence import get_dataset_store, get_image_store, get_label_store
+
+    dataset_manager = DatasetManager(
+        dataset_store=get_dataset_store(),
+        image_store=get_image_store(),
+        label_store=get_label_store(),
+        event_bus=event_bus,
+    )
+    set_dataset_manager(dataset_manager)
+
     await feed_streamer.start()
 
     yield
@@ -88,6 +101,7 @@ async def lifespan(app: FastAPI):
     await feed_streamer.stop()
     inference_manager.stop_all()
     feed_manager.shutdown()
+    set_dataset_manager(None)
     set_stores(None)
     await event_bus.stop()
 
