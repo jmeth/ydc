@@ -58,6 +58,19 @@ export interface WsCaptureEventMessage extends WsMessage {
   dataset: string
 }
 
+/** Notification pushed from the server via /ws/events. */
+export interface WsNotificationMessage extends WsMessage {
+  type: 'notification'
+  id: string
+  notification_type: 'toast' | 'banner' | 'alert' | 'status'
+  level: 'info' | 'success' | 'warning' | 'error'
+  category: string
+  title: string
+  message: string
+  timestamp: string
+  data: Record<string, unknown> | null
+}
+
 /** Client-to-server action messages. */
 export interface WsClientAction {
   action: string
