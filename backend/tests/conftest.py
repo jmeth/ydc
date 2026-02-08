@@ -99,6 +99,31 @@ def inference_manager():
 
 
 @pytest.fixture
+def dataset_manager(persistence_stores):
+    """
+    Fresh DatasetManager injected into the dataset API router.
+
+    Wired to real filesystem stores via persistence_stores fixture
+    and a mock EventBus. Cleans up by resetting the module-level reference.
+    """
+    from backend.dataset import set_dataset_manager
+    from backend.dataset.manager import DatasetManager
+
+    eb = MagicMock()
+    eb.publish = AsyncMock()
+
+    mgr = DatasetManager(
+        dataset_store=persistence_stores.dataset,
+        image_store=persistence_stores.image,
+        label_store=persistence_stores.label,
+        event_bus=eb,
+    )
+    set_dataset_manager(mgr)
+    yield mgr
+    set_dataset_manager(None)
+
+
+@pytest.fixture
 def persistence_stores(tmp_path):
     """
     Persistence Stores backed by a tmp_path directory.
