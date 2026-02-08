@@ -16,16 +16,15 @@ class TestStartInference:
         """Successful start returns 201 with output_feed_id."""
         response = await client.post("/api/inference/start", json={
             "source_feed_id": "test-feed-1234",
-            "model_name": "yolov8s-worldv2",
-            "model_type": "yolo_world",
-            "prompts": ["person", "car"],
+            "model_name": "yolo11n",
+            "model_type": "fine_tuned",
         })
         assert response.status_code == 201
         data = response.json()
         assert "output_feed_id" in data
         assert data["source_feed_id"] == "test-feed-1234"
-        assert data["model_name"] == "yolov8s-worldv2"
-        assert data["model_type"] == "yolo_world"
+        assert data["model_name"] == "yolo11n"
+        assert data["model_type"] == "fine_tuned"
         assert data["status"] == "running"
 
     @pytest.mark.asyncio
@@ -56,8 +55,8 @@ class TestStartInference:
         })
         assert response.status_code == 201
         data = response.json()
-        assert data["model_name"] == "yolov8s-worldv2"
-        assert data["model_type"] == "yolo_world"
+        assert data["model_name"] == "yolo11n"
+        assert data["model_type"] == "fine_tuned"
 
 
 class TestStopInference:
@@ -158,8 +157,9 @@ class TestSwitchModel:
 
         response = await client.put("/api/inference/model", json={
             "output_feed_id": output_id,
-            "model_name": "yolov8n.pt",
-            "model_type": "fine_tuned",
+            "model_name": "yolov8s-worldv2",
+            "model_type": "yolo_world",
+            "prompts": ["person", "car"],
         })
         assert response.status_code == 200
         data = response.json()
@@ -173,7 +173,7 @@ class TestSwitchModel:
         """Switching model on a nonexistent session returns 404."""
         response = await client.put("/api/inference/model", json={
             "output_feed_id": "nonexistent",
-            "model_name": "yolov8n.pt",
-            "model_type": "fine_tuned",
+            "model_name": "yolov8s-worldv2",
+            "model_type": "yolo_world",
         })
         assert response.status_code == 404

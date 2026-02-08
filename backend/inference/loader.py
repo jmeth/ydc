@@ -38,7 +38,7 @@ class ModelLoader:
         Load a YOLO model, returning a cached instance if available.
 
         Args:
-            model_name: Model file path or identifier (e.g. "yolov8s-worldv2").
+            model_name: Model file path or identifier (e.g. "yolo11n").
             model_type: Whether this is a YOLO-World or fine-tuned model.
             prompts: Text prompts for YOLO-World zero-shot detection.
 

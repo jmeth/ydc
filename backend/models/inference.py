@@ -12,12 +12,12 @@ class StartInferenceRequest(BaseModel):
     """Request body for POST /api/inference/start."""
     source_feed_id: str = Field(description="ID of the source feed to run inference on")
     model_name: str = Field(
-        default="yolov8s-worldv2",
-        description="Model file or identifier (e.g. 'yolov8s-worldv2', 'custom.pt')",
+        default="yolo11n",
+        description="Model file or identifier (e.g. 'yolo11n', 'yolov8s-worldv2', 'custom.pt')",
     )
     model_type: str = Field(
-        default="yolo_world",
-        description="Model type: 'yolo_world' (zero-shot) or 'fine_tuned' (custom weights)",
+        default="fine_tuned",
+        description="Model type: 'fine_tuned' (standard YOLO) or 'yolo_world' (zero-shot with prompts)",
     )
     prompts: list[str] | None = Field(
         default=None,
@@ -78,8 +78,8 @@ class SwitchModelRequest(BaseModel):
     output_feed_id: str = Field(description="Inference output feed to switch model on")
     model_name: str = Field(description="New model file or identifier")
     model_type: str = Field(
-        default="yolo_world",
-        description="New model type: 'yolo_world' or 'fine_tuned'",
+        default="fine_tuned",
+        description="New model type: 'fine_tuned' (standard YOLO) or 'yolo_world' (zero-shot with prompts)",
     )
     prompts: list[str] | None = Field(
         default=None,

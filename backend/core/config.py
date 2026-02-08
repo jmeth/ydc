@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     feed_default_buffer_size: int = Field(default=30, description="Default ring buffer size per feed")
 
     # Inference defaults
-    default_model_name: str = Field(default="yolov8s-worldv2", description="Default YOLO model for inference")
+    default_model_name: str = Field(default="yolo11n", description="Default YOLO model for inference")
     inference_max_sessions: int = Field(default=4, description="Maximum concurrent inference sessions")
 
     # Training defaults

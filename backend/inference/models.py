@@ -25,7 +25,7 @@ class LoadedModel:
     Attributes:
         model_type: Whether this is a YOLO-World or fine-tuned model.
         model: The ultralytics YOLO model instance.
-        model_name: Model file or identifier string (e.g. "yolov8s-worldv2").
+        model_name: Model file or identifier string (e.g. "yolo11n").
         classes: Mapping of class_id -> class_name from the model.
         prompts: Text prompts for YOLO-World models (None for fine-tuned).
     """
