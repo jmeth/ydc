@@ -24,22 +24,48 @@ This tool allows users to:
 ## Architecture
 
 ### Tech Stack
-- **Frontend**: Vue.js
-- **Backend**: FastAPI
+- **Frontend**: Vue.js 3 + TypeScript + Vite + Pinia
+- **Backend**: FastAPI + Pydantic + Uvicorn
 
 ### Directory Structure
 ```
 yolo_dataset_creator/
-├── server.py              # Legacy Flask backend server
-├── static/                # Legacy Frontend
+├── server.py              # Legacy Flask backend (port 5001, do not modify)
+├── static/                # Legacy Frontend (do not modify)
+├── requirements.txt       # All Python deps (legacy + new)
+├── pyproject.toml         # pytest config
+├── backend/               # FastAPI backend
+│   ├── main.py            # App entry point (uvicorn backend.main:app)
+│   ├── core/              # Config, events, exceptions
+│   ├── api/               # REST API routers
+│   ├── websocket/         # WebSocket endpoints
+│   ├── models/            # Pydantic schemas
+│   ├── feeds/             # Feeds subsystem (future)
+│   ├── inference/         # Inference subsystem (future)
+│   ├── dataset/           # Dataset subsystem (future)
+│   ├── training/          # Training subsystem (future)
+│   ├── persistence/       # Persistence layer (future)
+│   ├── notifications/     # Notifications subsystem (future)
+│   └── tests/             # Backend unit tests
+├── frontend/              # Vue.js 3 frontend
+│   ├── src/
+│   │   ├── views/         # Route views (Scan, Dataset, Train, Model)
+│   │   ├── stores/        # Pinia stores
+│   │   ├── composables/   # useApi, useWebSocket, useVideoStream
+│   │   ├── components/    # Vue components
+│   │   └── types/         # TypeScript type definitions
+│   └── vite.config.ts     # Dev proxy: /api→:8000, /ws→ws://:8000
 ├── datasets/              # Dataset storage (gitignored)
-| - frontend/              # vuejs frontend
-| - backend/               # fastapi backend
-| - docs/                  # architecture and user guides
-| - utils/                 # helper scripts
-| - tests/                 # e2e and other tests that don't belong in src code
-└── CLAUDE.md
+├── docs/                  # Architecture and user guides
+├── utils/                 # Helper scripts
+└── tests/                 # E2E and integration tests
 ```
+
+### Running
+- **Backend**: `source venv/bin/activate && uvicorn backend.main:app --reload --port 8000`
+- **Frontend**: `cd frontend && npm run dev` (Vite on port 5173)
+- **Tests**: `source venv/bin/activate && python -m pytest backend/tests/ -v`
+- **Legacy**: `python server.py` (port 5001, unchanged)
 
 ### Detailed Architecture
 
