@@ -2,16 +2,18 @@
 Shared test fixtures for backend unit tests.
 
 Provides an async HTTP client (via httpx) for testing FastAPI
-endpoints, a fresh EventBus instance per test, and a
-NotificationManager wired to a mock ConnectionManager.
+endpoints, a fresh EventBus instance per test, a
+NotificationManager wired to a mock ConnectionManager, and an
+InferenceManager wired to a mock FeedManager.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
 from backend.core.events import EventBus
+from backend.feeds.models import FeedConfig, FeedInfo, FeedStatus, FeedType
 from backend.main import app
 
 
@@ -57,3 +59,39 @@ def notification_manager():
     set_notification_manager(mgr)
     yield mgr
     set_notification_manager(None)
+
+
+@pytest.fixture
+def inference_manager():
+    """
+    Fresh InferenceManager injected into the inference API router.
+
+    Uses a mock FeedManager with standard success returns. The
+    ultralytics model loader is patched to avoid importing the
+    real library. Cleans up by resetting the module-level reference.
+    """
+    from backend.api.inference import set_inference_manager
+    from backend.inference.manager import InferenceManager
+
+    fm = MagicMock()
+    fm.get_feed_info.return_value = FeedInfo(
+        feed_id="test-feed-1234",
+        config=FeedConfig(feed_type=FeedType.CAMERA, source="0", name="cam0"),
+        status=FeedStatus.ACTIVE,
+    )
+    fm.register_derived_feed.return_value = True
+    fm.subscribe.return_value = True
+    fm.unsubscribe.return_value = True
+    fm.unregister_derived_feed.return_value = True
+    fm.push_derived_frame.return_value = True
+
+    with patch("backend.inference.loader.ModelLoader._load_ultralytics") as mock_load:
+        mock_model = MagicMock()
+        mock_model.names = {0: "person"}
+        mock_load.return_value = mock_model
+
+        mgr = InferenceManager(fm)
+        set_inference_manager(mgr)
+        yield mgr
+
+    set_inference_manager(None)

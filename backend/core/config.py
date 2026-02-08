@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     feed_jpeg_quality: int = Field(default=70, description="JPEG compression quality (0-100) for streamed frames")
     feed_default_buffer_size: int = Field(default=30, description="Default ring buffer size per feed")
 
+    # Inference defaults
+    default_model_name: str = Field(default="yolov8s-worldv2", description="Default YOLO model for inference")
+    inference_max_sessions: int = Field(default=4, description="Maximum concurrent inference sessions")
+
     # Training defaults
     training_epochs: int = Field(default=100, description="Default training epochs")
     training_batch_size: int = Field(default=16, description="Default training batch size")

@@ -21,6 +21,7 @@ from backend.core.exceptions import (
 )
 from backend.feeds.manager import FeedManager
 from backend.feeds.streaming import FeedStreamer
+from backend.inference.manager import InferenceManager
 from backend.notifications.manager import NotificationManager
 from backend.websocket.manager import connection_manager
 from backend.models.common import StatusResponse, ErrorResponse
@@ -61,11 +62,22 @@ async def lifespan(app: FastAPI):
     from backend.api.notifications import set_notification_manager
     set_notification_manager(notification_manager)
 
+    # Initialize inference subsystem
+    inference_manager = InferenceManager(
+        feed_manager=feed_manager,
+        notification_manager=notification_manager,
+        event_bus=event_bus,
+    )
+
+    from backend.api.inference import set_inference_manager
+    set_inference_manager(inference_manager)
+
     await feed_streamer.start()
 
     yield
 
     await feed_streamer.stop()
+    inference_manager.stop_all()
     feed_manager.shutdown()
     await event_bus.stop()
 
