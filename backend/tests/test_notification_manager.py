@@ -18,6 +18,9 @@ from backend.core.events import (
     FEED_ADDED,
     FEED_REMOVED,
     FEED_ERROR,
+    INFERENCE_STARTED,
+    INFERENCE_STOPPED,
+    INFERENCE_ERROR,
 )
 from backend.notifications.manager import NotificationManager
 from backend.notifications.models import (
@@ -306,7 +309,7 @@ class TestEventSubscriptions:
     """setup_event_subscriptions() wires all expected event types."""
 
     def test_subscribes_to_all_events(self, manager):
-        """All 7 event types are subscribed after setup."""
+        """All 10 event types are subscribed after setup."""
         bus = EventBus()
         manager.setup_event_subscriptions(bus)
         expected_events = [
@@ -317,6 +320,9 @@ class TestEventSubscriptions:
             FEED_ADDED,
             FEED_REMOVED,
             FEED_ERROR,
+            INFERENCE_STARTED,
+            INFERENCE_STOPPED,
+            INFERENCE_ERROR,
         ]
         for event_type in expected_events:
             assert len(bus._subscribers[event_type]) == 1
@@ -360,4 +366,48 @@ class TestEventSubscriptions:
         assert len(history) == 1
         assert history[0].type == NotificationType.BANNER
         assert history[0].level == NotificationLevel.WARNING
+        await bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_inference_started_creates_toast(self, manager, mock_connection_manager):
+        """Publishing inference.started creates an info toast."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+        await bus.publish(INFERENCE_STARTED, {"model_name": "yolov8s-worldv2"})
+        history = manager.get_history()
+        assert len(history) == 1
+        assert history[0].type == NotificationType.TOAST
+        assert history[0].level == NotificationLevel.INFO
+        assert history[0].category == NotificationCategory.INFERENCE
+        assert "yolov8s-worldv2" in history[0].message
+        await bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_inference_stopped_creates_toast(self, manager, mock_connection_manager):
+        """Publishing inference.stopped creates an info toast with frame count."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+        await bus.publish(INFERENCE_STOPPED, {"model_name": "yolov8n.pt", "frames_processed": 42})
+        history = manager.get_history()
+        assert len(history) == 1
+        assert history[0].level == NotificationLevel.INFO
+        assert history[0].category == NotificationCategory.INFERENCE
+        assert "42" in history[0].message
+        await bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_inference_error_creates_error_toast(self, manager, mock_connection_manager):
+        """Publishing inference.error creates an error toast."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+        await bus.publish(INFERENCE_ERROR, {"message": "GPU out of memory"})
+        history = manager.get_history()
+        assert len(history) == 1
+        assert history[0].type == NotificationType.TOAST
+        assert history[0].level == NotificationLevel.ERROR
+        assert history[0].category == NotificationCategory.INFERENCE
+        assert "GPU out of memory" in history[0].message
         await bus.stop()

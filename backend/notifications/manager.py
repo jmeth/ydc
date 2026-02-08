@@ -19,6 +19,9 @@ from backend.core.events import (
     FEED_ADDED,
     FEED_REMOVED,
     FEED_ERROR,
+    INFERENCE_STARTED,
+    INFERENCE_STOPPED,
+    INFERENCE_ERROR,
 )
 from backend.notifications.models import (
     Notification,
@@ -66,6 +69,9 @@ class NotificationManager:
         event_bus.subscribe(FEED_ADDED, self._on_feed_added)
         event_bus.subscribe(FEED_REMOVED, self._on_feed_removed)
         event_bus.subscribe(FEED_ERROR, self._on_feed_error)
+        event_bus.subscribe(INFERENCE_STARTED, self._on_inference_started)
+        event_bus.subscribe(INFERENCE_STOPPED, self._on_inference_stopped)
+        event_bus.subscribe(INFERENCE_ERROR, self._on_inference_error)
         logger.info("Notification event subscriptions registered")
 
     async def notify(
@@ -272,5 +278,41 @@ class NotificationManager:
             category=NotificationCategory.SCAN,
             title="Feed Error",
             message=data.get("message", f"An error occurred with feed '{feed_name}'."),
+            data=data,
+        )
+
+    async def _on_inference_started(self, data: dict[str, Any]) -> None:
+        """Handle inference.started event."""
+        model_name = data.get("model_name", "Unknown")
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.INFERENCE,
+            title="Inference Started",
+            message=f"Inference started with model '{model_name}'.",
+            data=data,
+        )
+
+    async def _on_inference_stopped(self, data: dict[str, Any]) -> None:
+        """Handle inference.stopped event."""
+        model_name = data.get("model_name", "Unknown")
+        frames = data.get("frames_processed", 0)
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.INFERENCE,
+            title="Inference Stopped",
+            message=f"Inference with model '{model_name}' stopped after {frames} frames.",
+            data=data,
+        )
+
+    async def _on_inference_error(self, data: dict[str, Any]) -> None:
+        """Handle inference.error event."""
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.ERROR,
+            category=NotificationCategory.INFERENCE,
+            title="Inference Error",
+            message=data.get("message", "An error occurred during inference."),
             data=data,
         )
