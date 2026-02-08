@@ -1,11 +1,24 @@
 # Datasets (user data)
 datasets/
 
+# Data directory
+data/
+
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Node.js
+node_modules/
+
+# Frontend build
+frontend/dist/
+
+# Environment
+.env
+.env.*
 
 # IDE
 .idea/
