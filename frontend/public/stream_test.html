@@ -7,17 +7,25 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: monospace; background: #111; color: #ccc; padding: 1rem; }
     h1 { font-size: 1.2rem; margin-bottom: 1rem; }
-    .controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
+    .controls { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; flex-wrap: wrap; }
     button { font-family: monospace; padding: 0.4rem 0.8rem; cursor: pointer;
              background: #333; color: #ccc; border: 1px solid #555; border-radius: 4px; }
     button:hover { background: #444; }
     button:disabled { opacity: 0.4; cursor: default; }
-    input { font-family: monospace; padding: 0.4rem; background: #222; color: #ccc;
-            border: 1px solid #555; border-radius: 4px; width: 140px; }
+    button.active { background: #264; border-color: #4a8; color: #8f8; }
+    input, select { font-family: monospace; padding: 0.4rem; background: #222; color: #ccc;
+            border: 1px solid #555; border-radius: 4px; }
+    input { width: 140px; }
+    select { width: 130px; }
+    .inference-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .inference-controls input { width: 260px; }
+    .canvas-wrap { position: relative; display: inline-block; }
     #video { max-width: 100%; border: 1px solid #333; border-radius: 4px; display: block;
              background: #000; image-rendering: auto; }
+    #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
     .stats { margin-top: 0.75rem; font-size: 0.85rem; line-height: 1.6; }
     .stats span { color: #0f0; }
+    .det-stats span { color: #f90; }
     .log { margin-top: 1rem; max-height: 150px; overflow-y: auto; font-size: 0.75rem;
            background: #0a0a0a; padding: 0.5rem; border-radius: 4px; border: 1px solid #222; }
     .log div { padding: 1px 0; }
@@ -28,6 +36,7 @@
 <body>
   <h1>WebSocket Video Stream Test</h1>
 
+  <!-- Feed controls -->
   <div class="controls">
     <button id="btnCreate">1. Create feed</button>
     <label>Source: <input id="inputSource" value="0" placeholder="0, 1, rtsp://..." /></label>
@@ -36,15 +45,38 @@
     <button id="btnDelete" disabled>Delete feed</button>
   </div>
 
-  <img id="video" width="640" height="480" alt="stream" />
+  <!-- Inference controls -->
+  <div class="controls inference-controls">
+    <button id="btnInference" disabled>3. Start inference</button>
+    <label>Model:
+      <select id="selectModelType">
+        <option value="fine_tuned">YOLO (fine_tuned)</option>
+        <option value="yolo_world">YOLO-World</option>
+      </select>
+    </label>
+    <label>Name: <input id="inputModelName" value="yolo11n" /></label>
+    <label>Prompts: <input id="inputPrompts" placeholder="person, car, dog (yolo-world)" /></label>
+    <label>Conf: <input id="inputConf" value="0.3" style="width:50px;" /></label>
+    <button id="btnStopInference" disabled>Stop inference</button>
+  </div>
+
+  <div class="canvas-wrap">
+    <img id="video" width="640" height="480" alt="stream" />
+    <canvas id="overlay" width="640" height="480"></canvas>
+  </div>
 
   <div class="stats">
     Feed ID: <span id="feedId">—</span><br>
+    Inference feed: <span id="inferFeedId">—</span><br>
     Status: <span id="status">disconnected</span><br>
     Frames received: <span id="frameCount">0</span><br>
     FPS (actual): <span id="fps">0</span><br>
     Avg frame size: <span id="frameSize">0</span> KB<br>
     Latency (frame→render): <span id="latency">0</span> ms
+  </div>
+  <div class="stats det-stats">
+    Detections (last frame): <span id="detCount">0</span><br>
+    Detection details: <span id="detDetails">—</span>
   </div>
 
   <div class="log" id="log"></div>
@@ -55,15 +87,22 @@
     const WS_URL = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/video`;
 
     const video = document.getElementById("video");
+    const overlayCanvas = document.getElementById("overlay");
+    const overlayCtx = overlayCanvas.getContext("2d");
     const elFeedId = document.getElementById("feedId");
+    const elInferFeedId = document.getElementById("inferFeedId");
     const elStatus = document.getElementById("status");
     const elFrameCount = document.getElementById("frameCount");
     const elFps = document.getElementById("fps");
     const elFrameSize = document.getElementById("frameSize");
     const elLatency = document.getElementById("latency");
+    const elDetCount = document.getElementById("detCount");
+    const elDetDetails = document.getElementById("detDetails");
     const logEl = document.getElementById("log");
 
-    let feedId = null;
+    let feedId = null;       // Raw camera feed
+    let inferFeedId = null;  // Inference output feed (derived)
+    let activeFeedId = null; // Whichever feed the WS is subscribed to
     let ws = null;
     let frameCount = 0;
     let totalBytes = 0;
@@ -79,7 +118,57 @@
       if (logEl.children.length > 200) logEl.lastChild.remove();
     }
 
-    // 1. Create feed
+    /** Draw bounding boxes and labels on the overlay canvas. */
+    function drawDetections(detections) {
+      // Sync canvas size to displayed image size
+      const rect = video.getBoundingClientRect();
+      overlayCanvas.width = rect.width;
+      overlayCanvas.height = rect.height;
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+      if (!detections || detections.length === 0) {
+        elDetCount.textContent = "0";
+        elDetDetails.textContent = "—";
+        return;
+      }
+
+      // We need the natural image dimensions to scale bboxes
+      const scaleX = rect.width / (video.naturalWidth || 640);
+      const scaleY = rect.height / (video.naturalHeight || 480);
+
+      const colors = ["#f44", "#4f4", "#44f", "#ff4", "#f4f", "#4ff", "#fa4", "#a4f"];
+      const summaries = [];
+
+      detections.forEach((det, i) => {
+        const [x1, y1, x2, y2] = det.bbox;
+        const sx1 = x1 * scaleX, sy1 = y1 * scaleY;
+        const sw = (x2 - x1) * scaleX, sh = (y2 - y1) * scaleY;
+        const color = colors[det.class_id % colors.length];
+
+        // Box
+        overlayCtx.strokeStyle = color;
+        overlayCtx.lineWidth = 2;
+        overlayCtx.strokeRect(sx1, sy1, sw, sh);
+
+        // Label background
+        const label = `${det.class_name} ${(det.confidence * 100).toFixed(0)}%`;
+        overlayCtx.font = "bold 13px monospace";
+        const textW = overlayCtx.measureText(label).width;
+        overlayCtx.fillStyle = color;
+        overlayCtx.fillRect(sx1, sy1 - 18, textW + 6, 18);
+
+        // Label text
+        overlayCtx.fillStyle = "#000";
+        overlayCtx.fillText(label, sx1 + 3, sy1 - 4);
+
+        summaries.push(`${det.class_name}(${(det.confidence * 100).toFixed(0)}%)`);
+      });
+
+      elDetCount.textContent = detections.length;
+      elDetDetails.textContent = summaries.join(", ");
+    }
+
+    // ---- 1. Create feed ----
     document.getElementById("btnCreate").onclick = async () => {
       const source = document.getElementById("inputSource").value.trim() || "0";
       log(`Creating camera feed with source="${source}"...`);
@@ -101,21 +190,35 @@
         log(`Feed created: ${feedId} (${data.status})`, "ok");
         document.getElementById("btnStream").disabled = false;
         document.getElementById("btnDelete").disabled = false;
+        document.getElementById("btnInference").disabled = false;
       } catch (e) {
         log(`Network error: ${e.message}`, "err");
       }
     };
 
-    // 2. Start streaming
+    // ---- 2. Start streaming (subscribes to active feed — raw or inference) ----
     document.getElementById("btnStream").onclick = () => {
-      if (!feedId) return;
+      const subFeedId = inferFeedId || feedId;
+      if (!subFeedId) return;
+      startStreaming(subFeedId);
+    };
+
+    function startStreaming(subFeedId) {
+      // Close any existing connection first
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+      resetStats();
+      activeFeedId = subFeedId;
+
       log(`Connecting WebSocket to ${WS_URL}...`);
       ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
         elStatus.textContent = "connected";
-        log("WebSocket open, subscribing...", "ok");
-        ws.send(JSON.stringify({ action: "subscribe", feed_id: feedId }));
+        log("WebSocket open, subscribing to " + subFeedId.substring(0, 16) + "...", "ok");
+        ws.send(JSON.stringify({ action: "subscribe", feed_id: subFeedId }));
         startFpsCounter();
       };
 
@@ -135,7 +238,6 @@
           frameCount++;
           fpsFrames++;
 
-          // Approximate payload size (base64 string length * 0.75 for decoded bytes)
           const bytes = msg.data.length * 0.75;
           totalBytes += bytes;
 
@@ -148,6 +250,9 @@
             elLatency.textContent = (now - lastFrameTime).toFixed(1);
           }
           lastFrameTime = now;
+
+          // Draw detection overlay if present
+          drawDetections(msg.detections);
         }
       };
 
@@ -162,40 +267,150 @@
       ws.onerror = () => {
         log("WebSocket error", "err");
       };
-    };
+    }
 
-    // Stop streaming
+    // ---- Stop streaming ----
     document.getElementById("btnStop").onclick = () => {
       if (ws) {
         ws.send(JSON.stringify({ action: "unsubscribe" }));
         ws.close();
         ws = null;
       }
+      activeFeedId = null;
       elStatus.textContent = "stopped";
       stopFpsCounter();
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       document.getElementById("btnStop").disabled = true;
       document.getElementById("btnStream").disabled = false;
     };
 
-    // Delete feed
+    // ---- Delete feed ----
     document.getElementById("btnDelete").onclick = async () => {
-      if (!feedId) return;
-      if (ws) {
-        ws.close();
-        ws = null;
+      // Stop inference first if running
+      if (inferFeedId) {
+        await stopInference();
       }
+      if (!feedId) return;
+      if (ws) { ws.close(); ws = null; }
       await fetch(`${API}/api/feeds/${feedId}`, { method: "DELETE" });
       log(`Feed ${feedId} deleted`, "ok");
       feedId = null;
+      activeFeedId = null;
       elFeedId.textContent = "—";
       elStatus.textContent = "disconnected";
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       document.getElementById("btnStream").disabled = true;
       document.getElementById("btnDelete").disabled = true;
       document.getElementById("btnStop").disabled = true;
+      document.getElementById("btnInference").disabled = true;
+      document.getElementById("btnStopInference").disabled = true;
       stopFpsCounter();
     };
 
-    // FPS counter — updates every second
+    // ---- 3. Start inference ----
+    document.getElementById("btnInference").onclick = async () => {
+      if (!feedId) return;
+
+      const modelType = document.getElementById("selectModelType").value;
+      const modelName = document.getElementById("inputModelName").value.trim() || "yolo11n";
+      const promptsRaw = document.getElementById("inputPrompts").value.trim();
+      const conf = parseFloat(document.getElementById("inputConf").value) || 0.3;
+
+      const body = {
+        source_feed_id: feedId,
+        model_name: modelName,
+        model_type: modelType,
+        confidence_threshold: conf,
+      };
+
+      // Only include prompts for yolo_world
+      if (modelType === "yolo_world" && promptsRaw) {
+        body.prompts = promptsRaw.split(",").map(s => s.trim()).filter(Boolean);
+      }
+
+      log(`Starting inference (${modelType}: ${modelName})...`);
+
+      try {
+        const res = await fetch(`${API}/api/inference/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          log(`Inference start failed: ${err.error || res.status}`, "err");
+          return;
+        }
+        const data = await res.json();
+        inferFeedId = data.output_feed_id;
+        elInferFeedId.textContent = inferFeedId;
+        log(`Inference started: ${inferFeedId} (model=${data.model_name})`, "ok");
+
+        document.getElementById("btnInference").disabled = true;
+        document.getElementById("btnStopInference").disabled = false;
+
+        // Auto-switch the stream to the inference output feed
+        if (ws) {
+          log("Switching stream to inference feed...");
+          startStreaming(inferFeedId);
+        }
+      } catch (e) {
+        log(`Network error: ${e.message}`, "err");
+      }
+    };
+
+    // ---- Stop inference ----
+    document.getElementById("btnStopInference").onclick = () => stopInference();
+
+    async function stopInference() {
+      if (!inferFeedId) return;
+
+      try {
+        const res = await fetch(`${API}/api/inference/stop`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ output_feed_id: inferFeedId }),
+        });
+        if (res.ok) {
+          log(`Inference stopped: ${inferFeedId}`, "ok");
+        } else {
+          const err = await res.json();
+          log(`Inference stop failed: ${err.error || res.status}`, "err");
+        }
+      } catch (e) {
+        log(`Network error: ${e.message}`, "err");
+      }
+
+      const wasInfer = activeFeedId === inferFeedId;
+      inferFeedId = null;
+      elInferFeedId.textContent = "—";
+      elDetCount.textContent = "0";
+      elDetDetails.textContent = "—";
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+      document.getElementById("btnInference").disabled = !feedId;
+      document.getElementById("btnStopInference").disabled = true;
+
+      // Switch back to the raw feed if we were watching inference
+      if (wasInfer && feedId && ws) {
+        log("Switching stream back to raw feed...");
+        startStreaming(feedId);
+      }
+    }
+
+    // ---- Helpers ----
+
+    function resetStats() {
+      frameCount = 0;
+      totalBytes = 0;
+      fpsFrames = 0;
+      lastFrameTime = 0;
+      elFrameCount.textContent = "0";
+      elFps.textContent = "0";
+      elFrameSize.textContent = "0";
+      elLatency.textContent = "0";
+    }
+
     function startFpsCounter() {
       fpsFrames = 0;
       fpsInterval = setInterval(() => {
@@ -209,6 +424,18 @@
       fpsInterval = null;
       elFps.textContent = "0";
     }
+
+    // Update default model name when model type changes
+    document.getElementById("selectModelType").onchange = (e) => {
+      const nameInput = document.getElementById("inputModelName");
+      if (e.target.value === "yolo_world") {
+        nameInput.value = "yolov8s-worldv2";
+        document.getElementById("inputPrompts").placeholder = "person, car, dog (required)";
+      } else {
+        nameInput.value = "yolo11n";
+        document.getElementById("inputPrompts").placeholder = "person, car, dog (yolo-world)";
+      }
+    };
   </script>
 </body>
 </html>
