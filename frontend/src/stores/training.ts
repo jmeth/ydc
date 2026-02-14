@@ -2,37 +2,57 @@
  * Training state store.
  *
  * Tracks training job status, progress updates from WebSocket,
- * configuration, and error state.
+ * configuration, error state, job history, and model list.
+ * Provides actions for training lifecycle and model management via the API.
  */
 
 import { defineStore } from 'pinia'
-import type { TrainingConfig } from '@/types/models'
+import { useApi } from '@/composables/useApi'
+import type { TrainingConfig, ModelInfo } from '@/types/models'
+import type {
+  TrainingStatusResponse,
+  TrainingHistoryResponse,
+  TrainingHistoryEntry,
+  ModelListResponse,
+  ModelResponse,
+  MessageResponse,
+} from '@/types/api'
 
 interface TrainingProgress {
   epoch: number
   totalEpochs: number
+  progressPct: number
   loss: number
   eta: string | null
+  metrics: Record<string, number>
 }
 
 interface TrainingState {
   status: 'idle' | 'training' | 'completed' | 'error'
+  jobId: string | null
   progress: TrainingProgress
   config: TrainingConfig | null
   error: string | null
+  history: TrainingHistoryEntry[]
+  models: ModelInfo[]
 }
 
 export const useTrainingStore = defineStore('training', {
   state: (): TrainingState => ({
     status: 'idle',
+    jobId: null,
     progress: {
       epoch: 0,
       totalEpochs: 100,
+      progressPct: 0,
       loss: 0,
       eta: null,
+      metrics: {},
     },
     config: null,
     error: null,
+    history: [],
+    models: [],
   }),
 
   actions: {
@@ -44,8 +64,133 @@ export const useTrainingStore = defineStore('training', {
     /** Reset store to idle state. */
     reset() {
       this.status = 'idle'
-      this.progress = { epoch: 0, totalEpochs: 100, loss: 0, eta: null }
+      this.jobId = null
+      this.progress = { epoch: 0, totalEpochs: 100, progressPct: 0, loss: 0, eta: null, metrics: {} }
       this.error = null
+    },
+
+    /**
+     * Start a training job.
+     *
+     * @param config - Training configuration
+     */
+    async startTraining(config: {
+      datasetName: string
+      baseModel: string
+      epochs?: number
+      batchSize?: number
+      imageSize?: number
+      patience?: number
+      freezeLayers?: number
+      lr0?: number
+      lrf?: number
+      modelName?: string
+    }) {
+      const { post } = useApi()
+      const res = await post<TrainingStatusResponse>('/training/start', {
+        dataset_name: config.datasetName,
+        base_model: config.baseModel,
+        epochs: config.epochs,
+        batch_size: config.batchSize,
+        image_size: config.imageSize,
+        patience: config.patience,
+        freeze_layers: config.freezeLayers,
+        lr0: config.lr0,
+        lrf: config.lrf,
+        model_name: config.modelName,
+      })
+      this._applyStatus(res)
+    },
+
+    /** Stop the current training job. */
+    async stopTraining() {
+      const { post } = useApi()
+      await post('/training/stop')
+      this.status = 'idle'
+    },
+
+    /** Fetch current training status from the backend. */
+    async fetchStatus() {
+      const { get } = useApi()
+      try {
+        const res = await get<TrainingStatusResponse>('/training/status')
+        this._applyStatus(res)
+      } catch (err) {
+        console.error('Failed to fetch training status:', err)
+      }
+    },
+
+    /** Fetch training job history. */
+    async fetchHistory() {
+      const { get } = useApi()
+      try {
+        const res = await get<TrainingHistoryResponse>('/training/history')
+        this.history = res.jobs
+      } catch (err) {
+        console.error('Failed to fetch training history:', err)
+      }
+    },
+
+    /** Fetch all trained models. */
+    async fetchModels() {
+      const { get } = useApi()
+      try {
+        const res = await get<ModelListResponse>('/models')
+        this.models = res.models.map(this._mapModel)
+      } catch (err) {
+        console.error('Failed to fetch models:', err)
+      }
+    },
+
+    /**
+     * Delete a trained model.
+     *
+     * @param modelName - Model name to delete
+     */
+    async deleteModel(modelName: string) {
+      const { del } = useApi()
+      await del<MessageResponse>(`/models/${modelName}`)
+      await this.fetchModels()
+    },
+
+    /**
+     * Set a model as the active inference model.
+     *
+     * @param modelName - Model name to activate
+     */
+    async activateModel(modelName: string) {
+      const { put } = useApi()
+      await put<MessageResponse>(`/models/${modelName}/activate`, {})
+      await this.fetchModels()
+    },
+
+    /** Apply a TrainingStatusResponse to the store state. */
+    _applyStatus(res: TrainingStatusResponse) {
+      this.jobId = res.job_id
+      this.status = res.status as TrainingState['status']
+      this.progress = {
+        epoch: res.current_epoch,
+        totalEpochs: res.total_epochs,
+        progressPct: res.progress_pct,
+        loss: res.metrics?.loss || 0,
+        eta: null,
+        metrics: res.metrics || {},
+      }
+      this.error = res.error || null
+    },
+
+    /** Map API model response to domain ModelInfo. */
+    _mapModel(m: ModelResponse): ModelInfo {
+      return {
+        name: m.name,
+        baseModel: m.base_model,
+        datasetName: m.dataset_name,
+        createdAt: m.created_at,
+        epochsCompleted: m.epochs_completed,
+        bestMap50: m.best_map50,
+        isActive: m.is_active,
+        path: m.path,
+      }
     },
   },
 })

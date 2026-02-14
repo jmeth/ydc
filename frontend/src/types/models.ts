@@ -5,15 +5,17 @@
  * and components.
  */
 
-/** A single object detection result. */
+/**
+ * A single object detection result.
+ *
+ * Uses bbox [x1, y1, x2, y2] in pixel coordinates,
+ * matching the backend InferenceFrame detection format.
+ */
 export interface Detection {
   classId: number
   className: string
   confidence: number
-  x: number
-  y: number
-  width: number
-  height: number
+  bbox: [number, number, number, number]
 }
 
 /** Image metadata in a dataset. */
@@ -22,19 +24,17 @@ export interface ImageInfo {
   split: string
   width: number
   height: number
-  annotated: boolean
-  reviewStatus?: 'pending' | 'accepted' | 'rejected'
+  sizeBytes: number
+  hasLabels: boolean
 }
 
-/** A single YOLO annotation. */
+/** A single YOLO annotation (normalized 0-1 center format). */
 export interface Annotation {
   classId: number
   x: number
   y: number
   width: number
   height: number
-  confidence?: number
-  auto: boolean
 }
 
 /** Training job configuration. */
@@ -57,11 +57,12 @@ export interface FeedInfo {
 
 /** Trained model information. */
 export interface ModelInfo {
-  id: string
   name: string
+  baseModel: string
   datasetName: string
-  epochs: number
-  metrics: Record<string, number>
-  createdAt: string
-  active: boolean
+  createdAt: number
+  epochsCompleted: number
+  bestMap50: number | null
+  isActive: boolean
+  path: string
 }

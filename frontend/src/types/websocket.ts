@@ -19,15 +19,17 @@ export interface WsFrameMessage extends WsMessage {
   timestamp: number
 }
 
-/** Detection within a video frame. */
+/**
+ * Detection within a video frame.
+ *
+ * Matches the backend's InferenceFrame detection format:
+ * class_name, confidence, bbox [x1,y1,x2,y2] in pixel coords, class_id.
+ */
 export interface WsDetection {
   class_id: number
   class_name: string
   confidence: number
-  x_center: number
-  y_center: number
-  width: number
-  height: number
+  bbox: [number, number, number, number]
 }
 
 /** Subscription confirmation from /ws/video. */
