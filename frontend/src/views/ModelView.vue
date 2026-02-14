@@ -13,6 +13,7 @@ import { useAppStore } from '@/stores/app'
 import { useInferenceStore } from '@/stores/inference'
 import { useTrainingStore } from '@/stores/training'
 import { useNotificationStore } from '@/stores/notifications'
+import DownloadModelForm from '@/components/training/DownloadModelForm.vue'
 import ModelList from '@/components/training/ModelList.vue'
 import FeedSelector from '@/components/inference/FeedSelector.vue'
 import VideoPlayer from '@/components/inference/VideoPlayer.vue'
@@ -96,8 +97,9 @@ onMounted(async () => {
 
 <template>
   <div class="model-layout">
-    <!-- Left: Model list -->
+    <!-- Left: Download form + Model list -->
     <div class="model-sidebar">
+      <DownloadModelForm />
       <ModelList @select="onSelectModel" />
     </div>
 
@@ -156,6 +158,9 @@ onMounted(async () => {
 }
 
 .model-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   overflow-y: auto;
 }
 

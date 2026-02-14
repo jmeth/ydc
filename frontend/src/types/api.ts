@@ -232,6 +232,12 @@ export interface ModelListResponse {
   count: number
 }
 
+/** Request body for POST /api/models/pretrained. */
+export interface DownloadPretrainedRequest {
+  model_id: string
+  name?: string
+}
+
 /** Generic message response. */
 export interface MessageResponse {
   message: string

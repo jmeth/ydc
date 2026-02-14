@@ -76,6 +76,17 @@ class ModelListResponse(BaseModel):
     count: int = Field(description="Total number of models")
 
 
+class DownloadPretrainedRequest(BaseModel):
+    """Request body for POST /api/models/pretrained."""
+    model_id: str = Field(
+        description="Pretrained model identifier (e.g. 'yolo11n.pt', 'yolov8s.pt')"
+    )
+    name: str | None = Field(
+        default=None,
+        description="Display name for the model (defaults to model_id minus .pt extension)",
+    )
+
+
 class MessageResponse(BaseModel):
     """Generic message response for confirmations."""
     message: str = Field(description="Human-readable confirmation message")

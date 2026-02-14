@@ -1,11 +1,14 @@
 """
 Models API router — endpoints for managing trained YOLO models.
 
-Provides REST endpoints to list, get, delete, activate, and export
-trained models. Uses TrainingManager as DI dependency (wraps ModelStore).
+Provides REST endpoints to list, get, delete, activate, export,
+and download pretrained models. Uses TrainingManager as DI dependency
+(wraps ModelStore).
 """
 
+import asyncio
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -13,6 +16,7 @@ from fastapi.responses import JSONResponse
 from backend.core.exceptions import NotFoundError
 from backend.models.common import ErrorResponse, NotImplementedResponse
 from backend.models.training import (
+    DownloadPretrainedRequest,
     MessageResponse,
     ModelListResponse,
     ModelResponse,
@@ -148,6 +152,117 @@ async def activate_model(model_id: str) -> ModelResponse:
     info = await mgr._model_store.get(model_id)
     logger.info("Activated model '%s'", model_id)
     return _model_info_to_response(info)
+
+
+@router.post(
+    "/pretrained",
+    summary="Download pretrained model",
+    description=(
+        "Download a pretrained YOLO model from the Ultralytics hub and "
+        "register it in the model store. The model_id should be a valid "
+        "Ultralytics model identifier such as 'yolo11n.pt' or 'yolov8s.pt'."
+    ),
+    response_model=ModelResponse,
+    responses={
+        409: {"model": ErrorResponse, "description": "Model name already exists"},
+        400: {"model": ErrorResponse, "description": "Invalid model identifier"},
+    },
+)
+async def download_pretrained(request: DownloadPretrainedRequest) -> ModelResponse | JSONResponse:
+    """
+    Download a pretrained YOLO model and register it in the model store.
+
+    Uses ultralytics.YOLO() to download the model weights, then copies
+    them into managed storage via the ModelStore. The download runs in
+    a thread pool executor to avoid blocking the event loop.
+
+    Args:
+        request: Contains model_id (e.g. 'yolo11n.pt') and optional name.
+
+    Returns:
+        ModelResponse for the newly registered model, or 409/400 error.
+    """
+    mgr = _get_manager()
+    model_store = mgr._model_store
+
+    # Derive display name from model_id if not provided
+    name = request.name or request.model_id.removesuffix(".pt")
+
+    # Check for duplicate name before downloading
+    existing = await model_store.get(name)
+    if existing is not None:
+        return JSONResponse(
+            status_code=409,
+            content={"error": f"Model '{name}' already exists"},
+        )
+
+    # Download the model in a thread pool to avoid blocking
+    loop = asyncio.get_event_loop()
+    try:
+        weights_path = await loop.run_in_executor(
+            None, _download_pretrained_model, request.model_id
+        )
+    except Exception as exc:
+        logger.error("Failed to download pretrained model '%s': %s", request.model_id, exc)
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Failed to download model '{request.model_id}': {exc}"},
+        )
+
+    # Register in the model store
+    try:
+        info = await model_store.save(
+            name=name,
+            weights_path=weights_path,
+            base_model=request.model_id,
+            dataset_name="pretrained",
+            epochs_completed=0,
+        )
+    except ValueError as exc:
+        # Race condition: another request registered the same name
+        return JSONResponse(
+            status_code=409,
+            content={"error": str(exc)},
+        )
+
+    logger.info("Downloaded and registered pretrained model '%s' from '%s'", name, request.model_id)
+    return _model_info_to_response(info)
+
+
+def _download_pretrained_model(model_id: str) -> Path:
+    """
+    Download a pretrained YOLO model using ultralytics.
+
+    Ultralytics caches downloaded models in its own cache directory.
+    We load the model, then read ckpt_path to find the cached weights.
+    The returned path remains valid because ultralytics persists its cache.
+
+    Args:
+        model_id: Ultralytics model identifier (e.g. 'yolo11n.pt').
+
+    Returns:
+        Path to the downloaded .pt weights file.
+
+    Raises:
+        Exception: If ultralytics fails to download or load the model.
+    """
+    from ultralytics import YOLO
+
+    model = YOLO(model_id)
+
+    # ckpt_path points to the actual weights file on disk
+    ckpt_path = getattr(model, "ckpt_path", None)
+    if ckpt_path:
+        source = Path(str(ckpt_path))
+        if source.exists():
+            return source
+
+    # Fallback: check if model_id was created in the cwd
+    cwd_path = Path(model_id)
+    if cwd_path.exists():
+        return cwd_path
+
+    raise FileNotFoundError(f"Could not locate downloaded weights for '{model_id}'")
 
 
 @router.post(

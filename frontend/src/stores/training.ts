@@ -16,6 +16,7 @@ import type {
   ModelListResponse,
   ModelResponse,
   MessageResponse,
+  DownloadPretrainedRequest,
 } from '@/types/api'
 
 interface TrainingProgress {
@@ -161,6 +162,20 @@ export const useTrainingStore = defineStore('training', {
     async activateModel(modelName: string) {
       const { put } = useApi()
       await put<MessageResponse>(`/models/${modelName}/activate`, {})
+      await this.fetchModels()
+    },
+
+    /**
+     * Download a pretrained YOLO model and register it.
+     *
+     * @param modelId - Ultralytics model identifier (e.g. 'yolo11n.pt')
+     * @param name - Optional display name (defaults to modelId minus .pt)
+     */
+    async downloadPretrained(modelId: string, name?: string) {
+      const { post } = useApi()
+      const body: DownloadPretrainedRequest = { model_id: modelId }
+      if (name) body.name = name
+      await post<ModelResponse>('/models/pretrained', body)
       await this.fetchModels()
     },
 
