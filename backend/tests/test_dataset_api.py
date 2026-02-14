@@ -192,6 +192,43 @@ class TestUploadImage:
         assert resp.status_code == 404
 
 
+class TestGetImageData:
+    """Tests for GET /api/datasets/{name}/images/{split}/{file}/data."""
+
+    async def test_get_image_data_success(self, client, dataset_manager):
+        """Return raw image bytes for an existing image."""
+        await dataset_manager.create_dataset("test-ds", ["cat"])
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        await dataset_manager.add_image("test-ds", "train", "img.jpg", img)
+
+        resp = await client.get("/api/datasets/test-ds/images/train/img.jpg/data")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/jpeg"
+        # Should return non-empty image bytes
+        assert len(resp.content) > 0
+
+    async def test_get_image_data_png(self, client, dataset_manager):
+        """Return correct content-type for PNG images."""
+        await dataset_manager.create_dataset("test-ds", ["cat"])
+        img = np.zeros((50, 50, 3), dtype=np.uint8)
+        await dataset_manager.add_image("test-ds", "train", "img.png", img)
+
+        resp = await client.get("/api/datasets/test-ds/images/train/img.png/data")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "image/png"
+
+    async def test_get_image_data_not_found(self, client, dataset_manager):
+        """Return 404 for nonexistent image."""
+        await dataset_manager.create_dataset("test-ds", ["cat"])
+        resp = await client.get("/api/datasets/test-ds/images/train/nope.jpg/data")
+        assert resp.status_code == 404
+
+    async def test_get_image_data_dataset_not_found(self, client, dataset_manager):
+        """Return 404 for nonexistent dataset."""
+        resp = await client.get("/api/datasets/nonexistent/images/train/img.jpg/data")
+        assert resp.status_code == 404
+
+
 class TestDeleteImage:
     """Tests for DELETE /api/datasets/{name}/images/{split}/{file}."""
 

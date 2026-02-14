@@ -236,6 +236,56 @@ async def export_dataset(name: str) -> FileResponse:
 
 
 @router.get(
+    "/{name}/images/{split}/{file}/data",
+    summary="Get image data",
+    description="Serve the actual image file for display in the frontend.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Image not found"},
+    },
+)
+async def get_image_data(name: str, split: str, file: str) -> FileResponse:
+    """
+    Serve an image file from a dataset split.
+
+    Returns the raw image file as a FileResponse (JPEG/PNG) for use
+    in <img> tags or thumbnails in the frontend.
+
+    Args:
+        name: Dataset name.
+        split: Dataset split (train, val, test).
+        file: Image filename.
+
+    Returns:
+        FileResponse with the image data.
+    """
+    mgr = _get_manager()
+    # Ensure the dataset exists (raises NotFoundError otherwise)
+    await mgr.get_dataset(name)
+
+    # Resolve the image path via the image store
+    from backend.persistence import get_image_store
+    image_store = get_image_store()
+    if not await image_store.exists(name, split, file):
+        raise NotFoundError("Image", f"{name}/{split}/{file}")
+
+    # Build file path using the image store's path convention
+    image_path = image_store._image_path(name, split, file)
+
+    # Determine media type from extension
+    suffix = Path(file).suffix.lower()
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".bmp": "image/bmp",
+        ".webp": "image/webp",
+    }
+    media_type = media_types.get(suffix, "application/octet-stream")
+
+    return FileResponse(path=str(image_path), media_type=media_type)
+
+
+@router.get(
     "/{name}/images",
     summary="List images",
     description="List images in a dataset with optional split filter.",
