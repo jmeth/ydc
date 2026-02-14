@@ -15,6 +15,7 @@ import type { ImageInfo } from '@/types/models'
 import DatasetSelector from '@/components/dataset/DatasetSelector.vue'
 import ImageGrid from '@/components/dataset/ImageGrid.vue'
 import BulkActions from '@/components/dataset/BulkActions.vue'
+import ImageEditor from '@/components/dataset/ImageEditor.vue'
 
 const datasetStore = useDatasetStore()
 
@@ -118,7 +119,15 @@ onMounted(async () => {
       <div class="empty-state-text">Select or create a dataset to get started</div>
     </div>
 
-    <!-- ImageEditor modal will be added in Step 7 -->
+    <!-- ImageEditor modal — opens on double-click from the grid -->
+    <ImageEditor
+      v-if="editorImage && datasetStore.currentDatasetInfo"
+      :image="editorImage"
+      :images="datasetStore.filteredImages"
+      :classes="datasetStore.currentDatasetInfo.classes"
+      @close="editorImage = null"
+      @save="datasetStore.loadImages()"
+    />
   </div>
 </template>
 
