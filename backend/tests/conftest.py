@@ -124,6 +124,41 @@ def dataset_manager(persistence_stores):
 
 
 @pytest.fixture
+def capture_manager(dataset_manager):
+    """
+    Fresh CaptureManager injected into the capture API router.
+
+    Uses a mock FeedManager and the real DatasetManager from the
+    dataset_manager fixture. Cleans up by resetting the module-level
+    references.
+    """
+    from backend.api.capture.router import set_capture_manager as set_capture_api_manager
+    from backend.capture import set_capture_manager
+    from backend.capture.manager import CaptureManager
+
+    fm = MagicMock()
+    fm.get_feed_info.return_value = FeedInfo(
+        feed_id="test-feed-1234",
+        config=FeedConfig(feed_type=FeedType.CAMERA, source="0", name="cam0"),
+        status=FeedStatus.ACTIVE,
+    )
+    fm.is_derived_feed.return_value = False
+    fm.subscribe.return_value = True
+    fm.unsubscribe.return_value = True
+    fm.get_frame.return_value = None
+
+    eb = MagicMock()
+    eb.publish = AsyncMock()
+
+    mgr = CaptureManager(fm, dataset_manager, event_bus=eb)
+    set_capture_manager(mgr)
+    set_capture_api_manager(mgr)
+    yield mgr
+    set_capture_manager(None)
+    set_capture_api_manager(None)
+
+
+@pytest.fixture
 def persistence_stores(tmp_path):
     """
     Persistence Stores backed by a tmp_path directory.

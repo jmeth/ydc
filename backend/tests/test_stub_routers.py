@@ -11,13 +11,8 @@ import pytest
 # All stub endpoints: (method, path)
 # Feeds endpoints removed — now implemented (see test_feeds_api.py)
 # Inference endpoints removed — now implemented (see test_inference_api.py)
+# Capture endpoints removed — now implemented (see test_capture_api.py)
 STUB_ENDPOINTS = [
-    # Capture
-    ("POST", "/api/capture/start"),
-    ("POST", "/api/capture/stop"),
-    ("GET", "/api/capture/status"),
-    ("POST", "/api/capture/trigger"),
-    ("PUT", "/api/capture/config"),
     # Datasets (most endpoints now implemented — see test_dataset_api.py)
     # Review queue stubs remain
     ("GET", "/api/datasets/test-ds/review"),

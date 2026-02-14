@@ -94,13 +94,29 @@ async def lifespan(app: FastAPI):
     )
     set_dataset_manager(dataset_manager)
 
+    # Initialize capture subsystem
+    from backend.capture import set_capture_manager
+    from backend.capture.manager import CaptureManager
+    from backend.api.capture.router import set_capture_manager as set_capture_api_manager
+
+    capture_manager = CaptureManager(
+        feed_manager=feed_manager,
+        dataset_manager=dataset_manager,
+        event_bus=event_bus,
+    )
+    set_capture_manager(capture_manager)
+    set_capture_api_manager(capture_manager)
+
     await feed_streamer.start()
 
     yield
 
+    await capture_manager.stop()
     await feed_streamer.stop()
     inference_manager.stop_all()
     feed_manager.shutdown()
+    set_capture_manager(None)
+    set_capture_api_manager(None)
     set_dataset_manager(None)
     set_stores(None)
     await event_bus.stop()

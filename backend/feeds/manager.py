@@ -297,11 +297,12 @@ class FeedManager:
                 return False
             self._derived_feeds[derived.feed_id] = derived
             self._derived_buffers[derived.feed_id] = RingBuffer(max_size=derived.buffer_size)
+            self._subscribers[derived.feed_id] = []
             return True
 
     def push_derived_frame(self, derived_feed_id: str, frame: Frame) -> bool:
         """
-        Push a processed frame into a derived feed's buffer.
+        Push a processed frame into a derived feed's buffer and notify subscribers.
 
         Args:
             derived_feed_id: The derived feed to push to
@@ -315,11 +316,22 @@ class FeedManager:
         if buf is None:
             return False
         buf.push(frame)
+
+        # Snapshot subscribers under lock, call outside lock (same pattern as _capture_loop)
+        with self._lock:
+            callbacks = list(self._subscribers.get(derived_feed_id, []))
+
+        for cb in callbacks:
+            try:
+                cb(derived_feed_id, frame)
+            except Exception:
+                logger.exception("Subscriber callback error for derived feed %s", derived_feed_id[:8])
+
         return True
 
     def unregister_derived_feed(self, derived_feed_id: str) -> bool:
         """
-        Remove a derived feed and its buffer.
+        Remove a derived feed, its buffer, and any subscribers.
 
         Args:
             derived_feed_id: The derived feed to remove
@@ -330,7 +342,21 @@ class FeedManager:
         with self._lock:
             removed = self._derived_feeds.pop(derived_feed_id, None)
             self._derived_buffers.pop(derived_feed_id, None)
+            self._subscribers.pop(derived_feed_id, None)
             return removed is not None
+
+    def is_derived_feed(self, feed_id: str) -> bool:
+        """
+        Check whether a feed_id refers to a derived (virtual) feed.
+
+        Args:
+            feed_id: The feed identifier to check.
+
+        Returns:
+            True if feed_id is a registered derived feed, False otherwise.
+        """
+        with self._lock:
+            return feed_id in self._derived_feeds
 
     def list_feeds(self) -> list[FeedInfo]:
         """

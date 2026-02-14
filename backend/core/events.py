@@ -46,6 +46,10 @@ DATASET_DELETED = "dataset.deleted"
 DATASET_IMAGE_ADDED = "dataset.image_added"
 DATASET_IMAGE_DELETED = "dataset.image_deleted"
 
+CAPTURE_STARTED = "capture.started"
+CAPTURE_STOPPED = "capture.stopped"
+CAPTURE_FRAME_CAPTURED = "capture.frame_captured"
+
 
 class EventBus:
     """

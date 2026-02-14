@@ -36,6 +36,7 @@ class NotificationCategory(str, Enum):
     TRAINING = "training"
     DATASET = "dataset"
     INFERENCE = "inference"
+    CAPTURE = "capture"
 
 
 @dataclass

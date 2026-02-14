@@ -26,6 +26,9 @@ from backend.core.events import (
     DATASET_DELETED,
     DATASET_IMAGE_ADDED,
     DATASET_IMAGE_DELETED,
+    CAPTURE_STARTED,
+    CAPTURE_STOPPED,
+    CAPTURE_FRAME_CAPTURED,
 )
 from backend.notifications.models import (
     Notification,
@@ -80,6 +83,9 @@ class NotificationManager:
         event_bus.subscribe(DATASET_DELETED, self._on_dataset_deleted)
         event_bus.subscribe(DATASET_IMAGE_ADDED, self._on_dataset_image_added)
         event_bus.subscribe(DATASET_IMAGE_DELETED, self._on_dataset_image_deleted)
+        event_bus.subscribe(CAPTURE_STARTED, self._on_capture_started)
+        event_bus.subscribe(CAPTURE_STOPPED, self._on_capture_stopped)
+        event_bus.subscribe(CAPTURE_FRAME_CAPTURED, self._on_capture_frame_captured)
         logger.info("Notification event subscriptions registered")
 
     async def notify(
@@ -373,5 +379,43 @@ class NotificationManager:
             category=NotificationCategory.DATASET,
             title="Image Deleted",
             message=f"Image '{filename}' removed from dataset '{name}'.",
+            data=data,
+        )
+
+    async def _on_capture_started(self, data: dict[str, Any]) -> None:
+        """Handle capture.started event."""
+        dataset = data.get("dataset_name", "Unknown")
+        mode = data.get("mode", "unknown")
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.CAPTURE,
+            title="Capture Started",
+            message=f"Capture started in {mode} mode, saving to '{dataset}'.",
+            data=data,
+        )
+
+    async def _on_capture_stopped(self, data: dict[str, Any]) -> None:
+        """Handle capture.stopped event."""
+        total = data.get("total_captures", 0)
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.CAPTURE,
+            title="Capture Stopped",
+            message=f"Capture stopped after {total} frames captured.",
+            data=data,
+        )
+
+    async def _on_capture_frame_captured(self, data: dict[str, Any]) -> None:
+        """Handle capture.frame_captured event."""
+        filename = data.get("filename", "Unknown")
+        dataset = data.get("dataset_name", "Unknown")
+        await self.notify(
+            type=NotificationType.STATUS,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.CAPTURE,
+            title="Frame Captured",
+            message=f"Captured '{filename}' to dataset '{dataset}'.",
             data=data,
         )
