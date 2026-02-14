@@ -43,6 +43,11 @@ const COLORS = [
   '#26c6da', '#ffca28', '#ec407a', '#8d6e63', '#78909c',
 ]
 
+/** Get a color for a class ID (wraps around palette). */
+function colorFor(classId: number): string {
+  return COLORS[classId % COLORS.length] ?? '#78909c'
+}
+
 const containerRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const imageRef = ref<HTMLImageElement | null>(null)
@@ -151,7 +156,7 @@ function draw() {
   // Draw each annotation
   props.annotations.forEach((ann, i) => {
     const { x1, y1, x2, y2 } = toPixel(ann)
-    const color = COLORS[ann.classId % COLORS.length]
+    const color = colorFor(ann.classId)
     const isSelected = i === props.selectedIndex
 
     ctx.strokeStyle = color
@@ -176,7 +181,7 @@ function draw() {
 
   // Draw in-progress box
   if (isDrawing.value) {
-    ctx.strokeStyle = COLORS[props.activeClassId % COLORS.length]
+    ctx.strokeStyle = colorFor(props.activeClassId)
     ctx.lineWidth = 2
     ctx.setLineDash([5, 3])
     const x = Math.min(drawStart.value.x, drawEnd.value.x)
@@ -191,7 +196,9 @@ function draw() {
 /** Find which annotation is under the mouse position. */
 function hitTest(pos: { x: number; y: number }): number {
   for (let i = props.annotations.length - 1; i >= 0; i--) {
-    const { x1, y1, x2, y2 } = toPixel(props.annotations[i])
+    const ann = props.annotations[i]
+    if (!ann) continue
+    const { x1, y1, x2, y2 } = toPixel(ann)
     if (pos.x >= x1 && pos.x <= x2 && pos.y >= y1 && pos.y <= y2) {
       return i
     }
@@ -209,10 +216,11 @@ function onMouseDown(event: MouseEvent) {
     drawEnd.value = pos
   } else if (props.mode === 'edit') {
     const hit = hitTest(pos)
-    if (hit >= 0) {
+    const hitAnn = props.annotations[hit]
+    if (hit >= 0 && hitAnn) {
       emit('select', hit)
       isDragging.value = true
-      const { x1, y1 } = toPixel(props.annotations[hit])
+      const { x1, y1 } = toPixel(hitAnn)
       dragOffset.value = { x: pos.x - x1, y: pos.y - y1 }
     } else {
       emit('select', -1)
@@ -228,6 +236,7 @@ function onMouseMove(event: MouseEvent) {
     draw()
   } else if (isDragging.value && props.selectedIndex >= 0) {
     const ann = props.annotations[props.selectedIndex]
+    if (!ann) return
     const { x1, y1, x2, y2 } = toPixel(ann)
     const w = x2 - x1
     const h = y2 - y1
@@ -235,7 +244,7 @@ function onMouseMove(event: MouseEvent) {
     const newY1 = pos.y - dragOffset.value.y
     const norm = toNormalized(newX1, newY1, newX1 + w, newY1 + h)
     const updated = [...props.annotations]
-    updated[props.selectedIndex] = { ...ann, ...norm }
+    updated[props.selectedIndex] = { classId: ann.classId, ...norm }
     emit('update:annotations', updated)
     draw()
   }

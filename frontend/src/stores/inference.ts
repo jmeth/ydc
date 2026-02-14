@@ -98,8 +98,8 @@ export const useInferenceStore = defineStore('inference', {
       const { get } = useApi()
       try {
         const res = await get<InferenceStatusResponse>('/inference/status')
-        if (res.sessions.length > 0) {
-          const session = res.sessions[0]
+        const session = res.sessions[0]
+        if (session) {
           this.status = session.status === 'running' ? 'running' : 'idle'
           this.sourceFeedId = session.source_feed_id
           this.outputFeedId = session.output_feed_id

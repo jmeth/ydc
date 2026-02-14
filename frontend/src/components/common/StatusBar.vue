@@ -8,10 +8,12 @@
 import { useAppStore } from '@/stores/app'
 import { useCaptureStore } from '@/stores/capture'
 import { useTrainingStore } from '@/stores/training'
+import { useInferenceStore } from '@/stores/inference'
 
 const appStore = useAppStore()
 const captureStore = useCaptureStore()
 const trainingStore = useTrainingStore()
+const inferenceStore = useInferenceStore()
 </script>
 
 <template>
@@ -22,6 +24,14 @@ const trainingStore = useTrainingStore()
         :class="appStore.isConnected ? 'connected' : 'disconnected'"
       ></span>
       {{ appStore.isConnected ? 'Connected' : 'Disconnected' }}
+    </span>
+
+    <span v-if="inferenceStore.status === 'running'" class="status-item">
+      <span class="status-dot connected"></span>
+      Inference: {{ inferenceStore.modelId ?? 'unknown' }}
+      <template v-if="inferenceStore.stats.fps > 0">
+        &middot; {{ inferenceStore.stats.fps.toFixed(1) }} FPS
+      </template>
     </span>
 
     <span v-if="captureStore.status === 'running'" class="status-item">

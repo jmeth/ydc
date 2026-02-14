@@ -32,7 +32,7 @@ const COLORS = [
  * @returns Hex color string
  */
 function colorForClass(classId: number): string {
-  return COLORS[classId % COLORS.length]
+  return COLORS[classId % COLORS.length] ?? '#78909c'
 }
 </script>
 

@@ -55,11 +55,18 @@ export const useNotificationStore = defineStore('notifications', {
     /**
      * Show a toast notification that auto-dismisses after 5 seconds.
      *
-     * @param toast - Toast content (id is assigned automatically)
+     * Accepts either a full toast object or a convenience (message, level) form.
+     *
+     * @param toastOrMessage - Toast object or message string
+     * @param level - Optional level when using convenience form (default: 'info')
      */
-    showToast(toast: Omit<Toast, 'id'>) {
+    showToast(toastOrMessage: Omit<Toast, 'id'> | string, level?: Toast['level']) {
       const id = `toast-${++nextId}`
-      this.toasts.push({ ...toast, id })
+      const toast: Toast =
+        typeof toastOrMessage === 'string'
+          ? { id, level: level ?? 'info', title: '', message: toastOrMessage }
+          : { ...toastOrMessage, id }
+      this.toasts.push(toast)
       setTimeout(() => this.dismiss(id), 5000)
     },
 

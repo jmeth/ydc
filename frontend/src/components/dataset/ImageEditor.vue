@@ -97,14 +97,16 @@ async function saveAnnotations() {
 async function prev() {
   if (!hasPrev.value) return
   if (dirty.value) await saveAnnotations()
-  currentImage.value = props.images[currentIdx.value - 1]
+  const img = props.images[currentIdx.value - 1]
+  if (img) currentImage.value = img
 }
 
 /** Navigate to the next image. */
 async function next() {
   if (!hasNext.value) return
   if (dirty.value) await saveAnnotations()
-  currentImage.value = props.images[currentIdx.value + 1]
+  const img = props.images[currentIdx.value + 1]
+  if (img) currentImage.value = img
 }
 
 /** Handle annotation updates from the canvas. */

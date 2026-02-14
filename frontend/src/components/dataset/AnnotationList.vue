@@ -43,7 +43,9 @@ const emit = defineEmits<{
  */
 function changeClass(index: number, classId: number) {
   const updated = [...props.annotations]
-  updated[index] = { ...updated[index], classId }
+  const existing = updated[index]
+  if (!existing) return
+  updated[index] = { ...existing, classId }
   emit('update:annotations', updated)
 }
 </script>
