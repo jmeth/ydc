@@ -4,11 +4,13 @@
  *
  * Provides start/stop capture, manual trigger, dataset/split selectors,
  * and configuration inputs (interval, negative ratio, confidence threshold).
- * Disabled when no inference session is running.
+ * Supports both raw capture (from a source feed) and inference capture
+ * (from an inference output feed).
  *
  * Props:
  *   inferenceRunning - Whether an inference session is active
- *   outputFeedId - Feed ID of the inference output (used for capture)
+ *   outputFeedId - Feed ID of the inference output (used for inference capture)
+ *   sourceFeedId - Feed ID of the raw source feed (used for raw capture)
  */
 import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
@@ -18,6 +20,7 @@ import { useNotificationStore } from '@/stores/notifications'
 const props = defineProps<{
   inferenceRunning: boolean
   outputFeedId: string | null
+  sourceFeedId: string | null
 }>()
 
 const appStore = useAppStore()
@@ -34,21 +37,28 @@ const negativeRatio = ref(captureStore.config.negativeRatio)
 const confidenceThreshold = ref(captureStore.config.confidenceThreshold)
 
 const isRunning = computed(() => captureStore.status === 'running')
+
+/** The feed ID to capture from: inference output if running, else raw source. */
+const captureFeedId = computed(() =>
+  props.inferenceRunning && props.outputFeedId
+    ? props.outputFeedId
+    : props.sourceFeedId
+)
+
 const canStart = computed(() =>
-  props.inferenceRunning &&
-  props.outputFeedId &&
+  captureFeedId.value &&
   selectedDataset.value &&
   !isRunning.value
 )
 
 /** Start a capture session with the current configuration. */
 async function startCapture() {
-  if (!props.outputFeedId || !selectedDataset.value) return
+  if (!captureFeedId.value || !selectedDataset.value) return
   try {
     captureStore.config.captureInterval = interval.value
     captureStore.config.negativeRatio = negativeRatio.value
     captureStore.config.confidenceThreshold = confidenceThreshold.value
-    await captureStore.startCapture(props.outputFeedId, selectedDataset.value, selectedSplit.value)
+    await captureStore.startCapture(captureFeedId.value, selectedDataset.value, selectedSplit.value)
   } catch (err) {
     notificationStore.showToast('Failed to start capture', 'error')
   }
@@ -78,8 +88,8 @@ async function triggerCapture() {
   <div class="card">
     <div class="card-header">Capture</div>
 
-    <div v-if="!props.inferenceRunning" class="empty-state">
-      <div class="empty-state-text">Start inference to enable capture</div>
+    <div v-if="!captureFeedId" class="empty-state">
+      <div class="empty-state-text">Select a feed to enable capture</div>
     </div>
 
     <template v-else>

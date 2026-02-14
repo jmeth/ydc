@@ -165,6 +165,7 @@ onMounted(async () => {
       <CaptureControls
         :inference-running="isInferenceRunning"
         :output-feed-id="inferenceStore.outputFeedId"
+        :source-feed-id="selectedFeedId"
       />
     </div>
   </div>
