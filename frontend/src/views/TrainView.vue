@@ -1,34 +1,47 @@
 <script setup lang="ts">
 /**
- * Training mode view.
+ * Training mode view — configure and run YOLO model training.
  *
- * Hosts training config form, progress display, and model list.
- * Placeholder until Phase 7.
+ * Stacked layout: TrainingConfig form at top, ProgressDisplay when
+ * training is active, and TrainingHistory table showing past runs.
+ *
+ * On mount: fetches datasets, current training status, and history.
  */
+import { computed, onMounted } from 'vue'
+import { useAppStore } from '@/stores/app'
+import { useTrainingStore } from '@/stores/training'
+import TrainingConfig from '@/components/training/TrainingConfig.vue'
+import ProgressDisplay from '@/components/training/ProgressDisplay.vue'
+import TrainingHistory from '@/components/training/TrainingHistory.vue'
+
+const appStore = useAppStore()
+const trainingStore = useTrainingStore()
+
+const isTraining = computed(() => trainingStore.status === 'training')
+
+onMounted(async () => {
+  await Promise.all([
+    appStore.fetchDatasets(),
+    trainingStore.fetchStatus(),
+    trainingStore.fetchHistory(),
+  ])
+})
 </script>
 
 <template>
   <div class="train-view">
-    <h1>Train Mode</h1>
-    <p>Configure and run YOLO model training on your datasets.</p>
-    <div class="placeholder">
-      <p>Training configuration, progress display, and model list will be added in later phases.</p>
-    </div>
+    <TrainingConfig :disabled="isTraining" />
+    <ProgressDisplay />
+    <TrainingHistory />
   </div>
 </template>
 
 <style scoped>
 .train-view {
-  max-width: 1200px;
+  max-width: 800px;
   margin: 0 auto;
-}
-
-.placeholder {
-  border: 1px dashed var(--color-border);
-  border-radius: 8px;
-  padding: 3rem;
-  text-align: center;
-  color: var(--color-text-muted);
-  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 </style>
