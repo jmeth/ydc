@@ -61,10 +61,8 @@ function onSelectModel(name: string) {
 /** Start inference with the selected model and feed. */
 async function startInference() {
   if (!selectedFeedId.value || !selectedModelName.value) return
-  const model = trainingStore.models.find((m) => m.name === selectedModelName.value)
-  if (!model) return
   try {
-    await inferenceStore.startInference(selectedFeedId.value, model.path)
+    await inferenceStore.startInference(selectedFeedId.value, selectedModelName.value)
     await appStore.fetchFeeds()
   } catch {
     notificationStore.showToast('Failed to start inference', 'error')

@@ -59,21 +59,26 @@ export const useInferenceStore = defineStore('inference', {
      * Start an inference session on a feed.
      *
      * @param feedId - Source feed ID
-     * @param modelPath - Optional model weights path
+     * @param modelName - Optional model name or path
      * @param prompts - Optional YOLO-World class prompts
      */
-    async startInference(feedId: string, modelPath?: string, prompts?: Record<number, string[]>) {
+    async startInference(feedId: string, modelName?: string, prompts?: Record<number, string[]>) {
       const { post } = useApi()
       try {
+        // Convert prompts from Record<number, string[]> to flat string[]
+        const flatPrompts = prompts
+          ? Object.values(prompts).flat()
+          : undefined
         const res = await post<StartInferenceResponse>('/inference/start', {
-          feed_id: feedId,
-          model_path: modelPath,
-          prompts,
+          source_feed_id: feedId,
+          model_name: modelName,
+          model_type: flatPrompts ? 'yolo_world' : 'fine_tuned',
+          prompts: flatPrompts,
         })
         this.status = 'running'
         this.sourceFeedId = res.source_feed_id
         this.outputFeedId = res.output_feed_id
-        this.modelId = res.model
+        this.modelId = res.model_name
         if (prompts) this.prompts = prompts
       } catch (err) {
         this.status = 'error'
@@ -85,7 +90,9 @@ export const useInferenceStore = defineStore('inference', {
     async stopInference() {
       const { post } = useApi()
       try {
-        await post('/inference/stop')
+        await post('/inference/stop', {
+          output_feed_id: this.outputFeedId,
+        })
         this.reset()
       } catch (err) {
         console.error('Failed to stop inference:', err)
@@ -103,8 +110,8 @@ export const useInferenceStore = defineStore('inference', {
           this.status = session.status === 'running' ? 'running' : 'idle'
           this.sourceFeedId = session.source_feed_id
           this.outputFeedId = session.output_feed_id
-          this.modelId = session.model
-          this.prompts = session.prompts || {}
+          this.modelId = session.model_name
+          this.prompts = {}
         } else {
           this.reset()
         }
@@ -120,19 +127,25 @@ export const useInferenceStore = defineStore('inference', {
      */
     async updatePrompts(prompts: Record<number, string[]>) {
       const { put } = useApi()
-      await put('/inference/prompts', { prompts })
+      await put('/inference/prompts', {
+        output_feed_id: this.outputFeedId,
+        prompts: Object.values(prompts).flat(),
+      })
       this.prompts = prompts
     },
 
     /**
      * Switch the model on the active inference session.
      *
-     * @param modelPath - Path to the new model weights
+     * @param modelName - Model name or identifier
      */
-    async switchModel(modelPath: string) {
+    async switchModel(modelName: string) {
       const { put } = useApi()
-      await put('/inference/model', { model_path: modelPath })
-      this.modelId = modelPath
+      await put('/inference/model', {
+        output_feed_id: this.outputFeedId,
+        model_name: modelName,
+      })
+      this.modelId = modelName
     },
   },
 })

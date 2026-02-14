@@ -31,8 +31,8 @@ const notificationStore = useNotificationStore()
 
 /** Selected source feed for inference. */
 const selectedFeedId = ref<string | null>(null)
-/** Selected model for inference. */
-const selectedModelPath = ref<string | null>(null)
+/** Selected model name for inference. */
+const selectedModelName = ref<string | null>(null)
 
 const isInferenceRunning = computed(() => inferenceStore.status === 'running')
 
@@ -54,7 +54,7 @@ async function startInference() {
   try {
     await inferenceStore.startInference(
       selectedFeedId.value,
-      selectedModelPath.value || undefined,
+      selectedModelName.value || undefined,
       Object.keys(inferenceStore.prompts).length > 0 ? inferenceStore.prompts : undefined,
     )
     // Refresh feeds to see the new derived feed
@@ -102,7 +102,7 @@ onMounted(async () => {
     selectedFeedId.value = inferenceStore.sourceFeedId
   }
   if (inferenceStore.modelId) {
-    selectedModelPath.value = inferenceStore.modelId
+    selectedModelName.value = inferenceStore.modelId
   }
 })
 </script>
@@ -133,7 +133,7 @@ onMounted(async () => {
       <div class="card">
         <div class="card-header">Inference</div>
 
-        <ModelSelector v-model="selectedModelPath" />
+        <ModelSelector v-model="selectedModelName" />
 
         <div class="sidebar-actions">
           <button

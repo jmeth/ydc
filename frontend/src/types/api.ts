@@ -122,30 +122,40 @@ export interface PromptsResponse {
 
 /** Request body for POST /api/inference/start. */
 export interface StartInferenceRequest {
-  feed_id: string
-  model_path?: string
-  prompts?: Record<number, string[]>
+  source_feed_id: string
+  model_name?: string
+  model_type?: string
+  prompts?: string[]
+  confidence_threshold?: number
 }
 
 /** Response for POST /api/inference/start. */
 export interface StartInferenceResponse {
   source_feed_id: string
   output_feed_id: string
-  model: string
+  model_name: string
+  model_type: string
+  status: string
 }
 
 /** Single inference session status. */
 export interface InferenceSessionStatus {
   source_feed_id: string
   output_feed_id: string
-  model: string
-  prompts: Record<number, string[]>
+  model_name: string
+  model_type: string
+  prompts: string[] | null
+  confidence_threshold: number
+  frames_processed: number
+  avg_inference_ms: number
+  last_inference_ms: number
   status: string
 }
 
 /** Response for GET /api/inference/status. */
 export interface InferenceStatusResponse {
   sessions: InferenceSessionStatus[]
+  count: number
 }
 
 // --- Capture API ---

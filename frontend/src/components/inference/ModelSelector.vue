@@ -3,10 +3,10 @@
  * Dropdown selector for trained YOLO models.
  *
  * Displays models from the training store with name, dataset,
- * and mAP@50 info. Emits the selected model path via v-model.
+ * and mAP@50 info. Emits the selected model name via v-model.
  *
  * Props:
- *   modelValue - Currently selected model path (v-model)
+ *   modelValue - Currently selected model name (v-model)
  */
 import { useTrainingStore } from '@/stores/training'
 
@@ -43,7 +43,7 @@ function onSelect(event: Event) {
       <option
         v-for="model in trainingStore.models"
         :key="model.name"
-        :value="model.path"
+        :value="model.name"
       >
         {{ model.name }}
         <template v-if="model.datasetName"> ({{ model.datasetName }})</template>
