@@ -12,7 +12,12 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/scan',
+      redirect: '/feeds',
+    },
+    {
+      path: '/feeds',
+      name: 'feeds',
+      component: () => import('@/views/FeedsView.vue'),
     },
     {
       path: '/scan',

@@ -50,9 +50,12 @@ export interface TrainingConfig {
 export interface FeedInfo {
   id: string
   name: string
-  type: 'raw' | 'inference'
-  status: 'active' | 'inactive' | 'error'
-  sourceFeedId?: string
+  feedType: string
+  source: string
+  status: string
+  fps: number
+  resolution: [number, number] | null
+  frameCount: number
 }
 
 /** Trained model information. */

@@ -23,12 +23,12 @@ const appStore = useAppStore()
 
 /** Raw (source) feeds. */
 const rawFeeds = computed(() =>
-  appStore.feeds.filter((f) => f.type === 'raw')
+  appStore.feeds.filter((f) => f.feedType !== 'inference')
 )
 
 /** Inference (derived) feeds. */
 const inferenceFeeds = computed(() =>
-  appStore.feeds.filter((f) => f.type === 'inference')
+  appStore.feeds.filter((f) => f.feedType === 'inference')
 )
 
 /**

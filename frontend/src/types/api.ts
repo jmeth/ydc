@@ -39,11 +39,22 @@ export interface SystemConfig {
 
 /** Feed info as returned by GET /api/feeds. */
 export interface FeedInfoResponse {
-  id: string
+  feed_id: string
+  feed_type: string
+  source: string
   name: string
-  type: string
   status: string
-  source_feed_id?: string
+  fps: number
+  resolution: [number, number] | null
+  frame_count: number
+}
+
+/** Request body for POST /api/feeds. */
+export interface CreateFeedRequest {
+  feed_type: string
+  source: string
+  name?: string
+  buffer_size?: number
 }
 
 /** Response for GET /api/feeds. */

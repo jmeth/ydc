@@ -9,6 +9,7 @@
 
 <template>
   <nav class="app-nav">
+    <RouterLink to="/feeds" class="nav-link">Feeds</RouterLink>
     <RouterLink to="/scan" class="nav-link">Scan</RouterLink>
     <RouterLink to="/dataset" class="nav-link">Dataset</RouterLink>
     <RouterLink to="/train" class="nav-link">Train</RouterLink>

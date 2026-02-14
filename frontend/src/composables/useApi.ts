@@ -54,11 +54,13 @@ export function useApi() {
 
   /**
    * DELETE request.
+   * Returns null for 204 No Content responses.
    * @param path - API path after /api
    */
-  async function del<T>(path: string): Promise<T> {
+  async function del<T = void>(path: string): Promise<T> {
     const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
+    if (res.status === 204) return undefined as T
     return res.json()
   }
 
