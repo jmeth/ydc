@@ -12,6 +12,8 @@ from typing import Any
 
 from backend.core.events import (
     EventBus,
+    TRAINING_STARTED,
+    TRAINING_PROGRESS,
     TRAINING_COMPLETED,
     TRAINING_ERROR,
     RESOURCE_WARNING,
@@ -69,6 +71,8 @@ class NotificationManager:
         Args:
             event_bus: The event bus to subscribe to.
         """
+        event_bus.subscribe(TRAINING_STARTED, self._on_training_started)
+        event_bus.subscribe(TRAINING_PROGRESS, self._on_training_progress)
         event_bus.subscribe(TRAINING_COMPLETED, self._on_training_completed)
         event_bus.subscribe(TRAINING_ERROR, self._on_training_error)
         event_bus.subscribe(RESOURCE_WARNING, self._on_resource_warning)
@@ -214,6 +218,33 @@ class NotificationManager:
             self._notifications.clear()
 
     # --- Event callbacks ---
+
+    async def _on_training_started(self, data: dict[str, Any]) -> None:
+        """Handle training.started event."""
+        dataset = data.get("dataset_name", "Unknown")
+        model = data.get("base_model", "Unknown")
+        await self.notify(
+            type=NotificationType.TOAST,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.TRAINING,
+            title="Training Started",
+            message=data.get("message", f"Training started on '{dataset}' with {model}."),
+            data=data,
+        )
+
+    async def _on_training_progress(self, data: dict[str, Any]) -> None:
+        """Handle training.progress event."""
+        epoch = data.get("current_epoch", 0)
+        total = data.get("total_epochs", 0)
+        pct = data.get("progress_pct", 0)
+        await self.notify(
+            type=NotificationType.STATUS,
+            level=NotificationLevel.INFO,
+            category=NotificationCategory.TRAINING,
+            title="Training Progress",
+            message=data.get("message", f"Epoch {epoch}/{total} ({pct}%)"),
+            data=data,
+        )
 
     async def _on_training_completed(self, data: dict[str, Any]) -> None:
         """Handle training.completed event."""

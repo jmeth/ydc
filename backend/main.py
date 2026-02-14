@@ -94,6 +94,23 @@ async def lifespan(app: FastAPI):
     )
     set_dataset_manager(dataset_manager)
 
+    # Initialize training subsystem
+    from backend.training import set_training_manager
+    from backend.training.manager import TrainingManager
+    from backend.persistence import get_model_store
+
+    training_manager = TrainingManager(
+        model_store=get_model_store(),
+        dataset_store=get_dataset_store(),
+        event_bus=event_bus,
+    )
+    set_training_manager(training_manager)
+
+    from backend.api.training import set_training_manager as set_training_api_manager
+    from backend.api.models import set_training_manager as set_models_api_manager
+    set_training_api_manager(training_manager)
+    set_models_api_manager(training_manager)
+
     # Initialize capture subsystem
     from backend.capture import set_capture_manager
     from backend.capture.manager import CaptureManager
@@ -112,11 +129,15 @@ async def lifespan(app: FastAPI):
     yield
 
     await capture_manager.stop()
+    await training_manager.shutdown()
     await feed_streamer.stop()
     inference_manager.stop_all()
     feed_manager.shutdown()
     set_capture_manager(None)
     set_capture_api_manager(None)
+    set_training_manager(None)
+    set_training_api_manager(None)
+    set_models_api_manager(None)
     set_dataset_manager(None)
     set_stores(None)
     await event_bus.stop()

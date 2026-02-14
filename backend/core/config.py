@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     training_epochs: int = Field(default=100, description="Default training epochs")
     training_batch_size: int = Field(default=16, description="Default training batch size")
     training_image_size: int = Field(default=640, description="Default training image size")
+    training_patience: int = Field(default=20, description="Early stopping patience in epochs")
+    training_freeze_layers: int = Field(default=10, description="Number of backbone layers to freeze")
+    training_lr0: float = Field(default=0.001, description="Initial learning rate")
+    training_lrf: float = Field(default=0.01, description="Final learning rate factor")
+    training_max_jobs_history: int = Field(default=50, description="Maximum training jobs to keep in history")
 
 
 # Module-level singleton

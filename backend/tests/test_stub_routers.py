@@ -17,16 +17,9 @@ STUB_ENDPOINTS = [
     # Review queue stubs remain
     ("GET", "/api/datasets/test-ds/review"),
     ("POST", "/api/datasets/test-ds/review/bulk"),
-    # Training
-    ("POST", "/api/training/start"),
-    ("POST", "/api/training/stop"),
-    ("GET", "/api/training/status"),
-    ("GET", "/api/training/history"),
-    # Models
-    ("GET", "/api/models"),
-    ("GET", "/api/models/test-model"),
-    ("DELETE", "/api/models/test-model"),
-    ("PUT", "/api/models/test-model/activate"),
+    # Training endpoints removed — now implemented (see test_training_api.py)
+    # Models endpoints removed — now implemented (see test_models_api.py)
+    # Export is still a stub
     ("POST", "/api/models/test-model/export"),
     # Notifications endpoints removed — now implemented (see test_notifications_api.py)
     # System (resources is a stub)
