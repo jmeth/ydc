@@ -90,6 +90,89 @@ function toggleAug(key: string, defaultVal: number) {
   }
 }
 
+/** Active preset name for UI indicator. */
+const activePreset = ref<string | null>(null)
+
+/**
+ * Training presets — named configurations that set all training params
+ * and augmentation values at once. Each preset defines training
+ * hyperparameters and an augmentation overrides map.
+ */
+const presets: Record<string, {
+  label: string
+  desc: string
+  training: { epochs: number; batchSize: number; imageSize: number; patience: number; freezeLayers: number; lr0: number; lrf: number }
+  aug: Record<string, number>
+}> = {
+  small_dataset: {
+    label: 'Small Dataset',
+    desc: 'Optimized for <200 images: heavy augmentation, frozen backbone, lower LR to prevent overfitting',
+    training: { epochs: 300, batchSize: 8, imageSize: 640, patience: 50, freezeLayers: 10, lr0: 0.001, lrf: 0.01 },
+    aug: {
+      hsv_h: 0.02, hsv_s: 0.8, hsv_v: 0.5,
+      degrees: 15, translate: 0.2, scale: 0.75, shear: 5, flipud: 0.5, fliplr: 0.5,
+      mosaic: 1.0, mixup: 0.2, copy_paste: 0.2, erasing: 0.5,
+    },
+  },
+}
+
+/**
+ * Apply a named preset — sets all training params and augmentation
+ * values, then opens the advanced/augmentation sections so the user
+ * can see exactly what changed.
+ */
+function applyPreset(name: string) {
+  const p = presets[name]
+  if (!p) return
+
+  // Training hyperparams
+  epochs.value = p.training.epochs
+  batchSize.value = p.training.batchSize
+  imageSize.value = p.training.imageSize
+  patience.value = p.training.patience
+  freezeLayers.value = p.training.freezeLayers
+  lr0.value = p.training.lr0
+  lrf.value = p.training.lrf
+
+  // Clear all augmentation state then apply preset values
+  for (const group of augGroups) {
+    for (const param of group.params) {
+      if (param.key in p.aug) {
+        augEnabled[param.key] = true
+        augValues[param.key] = p.aug[param.key]
+      } else {
+        augEnabled[param.key] = false
+      }
+    }
+  }
+
+  // Open advanced + augmentation so user can see the changes
+  showAdvanced.value = true
+  showAugmentation.value = true
+  activePreset.value = name
+}
+
+/** Reset all values back to standard defaults. */
+function resetDefaults() {
+  epochs.value = 100
+  batchSize.value = 16
+  imageSize.value = 640
+  patience.value = 50
+  freezeLayers.value = 0
+  lr0.value = 0.01
+  lrf.value = 0.01
+
+  // Clear all augmentation overrides
+  for (const group of augGroups) {
+    for (const param of group.params) {
+      augEnabled[param.key] = false
+      delete augValues[param.key]
+    }
+  }
+
+  activePreset.value = null
+}
+
 /** Base model presets. */
 const modelPresets = ['yolo11n.pt', 'yolo11s.pt', 'yolo11m.pt', 'yolo11l.pt', 'yolo11x.pt']
 
@@ -137,6 +220,31 @@ async function startTraining() {
 <template>
   <div class="card">
     <div class="card-header">Training Configuration</div>
+
+    <!-- Presets -->
+    <div class="preset-bar">
+      <span class="preset-label">Presets:</span>
+      <button
+        v-for="(p, key) in presets"
+        :key="key"
+        class="btn btn-sm preset-btn"
+        :class="{ 'preset-active': activePreset === key }"
+        :disabled="props.disabled"
+        :title="p.desc"
+        @click="applyPreset(key)"
+      >
+        {{ p.label }}
+      </button>
+      <button
+        v-if="activePreset"
+        class="btn btn-sm preset-reset"
+        :disabled="props.disabled"
+        title="Reset all values to standard defaults"
+        @click="resetDefaults"
+      >
+        Reset Defaults
+      </button>
+    </div>
 
     <!-- Dataset and model selection -->
     <div class="config-row">
@@ -272,6 +380,41 @@ async function startTraining() {
 
 .config-row .form-group {
   flex: 1;
+}
+
+.preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.preset-label {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #888);
+  font-weight: 500;
+}
+
+.preset-btn {
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border, #444);
+  background: var(--color-bg-soft, #1a1a2e);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.preset-btn:hover:not(:disabled) {
+  border-color: var(--color-primary, #4a9eff);
+}
+
+.preset-active {
+  border-color: var(--color-primary, #4a9eff);
+  background: rgba(74, 158, 255, 0.12);
+}
+
+.preset-reset {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #888);
 }
 
 .advanced-toggle {
