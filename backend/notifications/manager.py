@@ -233,10 +233,21 @@ class NotificationManager:
         )
 
     async def _on_training_progress(self, data: dict[str, Any]) -> None:
-        """Handle training.progress event."""
+        """Handle training.progress event — broadcast directly and as notification."""
         epoch = data.get("current_epoch", 0)
         total = data.get("total_epochs", 0)
         pct = data.get("progress_pct", 0)
+        metrics = data.get("metrics", {})
+
+        # Broadcast raw progress event for real-time UI updates
+        await self._connection_manager.broadcast_event("training.progress", {
+            "current_epoch": epoch,
+            "total_epochs": total,
+            "progress_pct": pct,
+            "metrics": metrics,
+            "loss": metrics.get("loss", 0),
+        })
+
         await self.notify(
             type=NotificationType.STATUS,
             level=NotificationLevel.INFO,
@@ -247,7 +258,14 @@ class NotificationManager:
         )
 
     async def _on_training_completed(self, data: dict[str, Any]) -> None:
-        """Handle training.completed event."""
+        """Handle training.completed event — broadcast directly and as notification."""
+        # Broadcast raw completion event so frontend updates status immediately
+        await self._connection_manager.broadcast_event("training.completed", {
+            "model_name": data.get("model_name", ""),
+            "epochs_completed": data.get("epochs_completed", 0),
+            "best_map50": data.get("best_map50"),
+        })
+
         await self.notify(
             type=NotificationType.TOAST,
             level=NotificationLevel.SUCCESS,
@@ -258,7 +276,12 @@ class NotificationManager:
         )
 
     async def _on_training_error(self, data: dict[str, Any]) -> None:
-        """Handle training.error event."""
+        """Handle training.error event — broadcast directly and as notification."""
+        # Broadcast raw error event so frontend updates status immediately
+        await self._connection_manager.broadcast_event("training.error", {
+            "error": data.get("error", "Unknown error"),
+        })
+
         await self.notify(
             type=NotificationType.ALERT,
             level=NotificationLevel.ERROR,

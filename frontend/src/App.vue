@@ -16,7 +16,13 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import { useNotificationStore } from '@/stores/notifications'
 import { useTrainingStore } from '@/stores/training'
 import { useCaptureStore } from '@/stores/capture'
-import type { WsNotificationMessage, WsTrainingProgressMessage, WsCaptureEventMessage } from '@/types/websocket'
+import type {
+  WsNotificationMessage,
+  WsTrainingProgressMessage,
+  WsTrainingCompletedMessage,
+  WsTrainingErrorMessage,
+  WsCaptureEventMessage,
+} from '@/types/websocket'
 
 const { lastMessage } = useWebSocket('/ws/events')
 const notificationStore = useNotificationStore()
@@ -34,11 +40,26 @@ watch(lastMessage, (msg) => {
       const tp = msg as WsTrainingProgressMessage
       trainingStore.status = 'training'
       trainingStore.updateProgress({
-        epoch: tp.epoch,
+        epoch: tp.current_epoch,
         totalEpochs: tp.total_epochs,
-        loss: tp.loss,
-        eta: tp.eta,
+        progressPct: tp.progress_pct,
+        loss: tp.loss || tp.metrics?.loss || 0,
+        metrics: tp.metrics || {},
       })
+    } else if (wsMsg.type === 'training.completed') {
+      const tc = msg as WsTrainingCompletedMessage
+      trainingStore.status = 'completed'
+      trainingStore.updateProgress({
+        epoch: tc.epochs_completed,
+        totalEpochs: tc.epochs_completed,
+        progressPct: 100,
+        metrics: tc.best_map50 != null ? { mAP50: tc.best_map50 } : {},
+      })
+      trainingStore.fetchModels()
+    } else if (wsMsg.type === 'training.error') {
+      const te = msg as WsTrainingErrorMessage
+      trainingStore.status = 'error'
+      trainingStore.error = te.error
     } else if (wsMsg.type === 'capture.event') {
       const ce = msg as WsCaptureEventMessage
       if (ce.capture_type === 'positive') {

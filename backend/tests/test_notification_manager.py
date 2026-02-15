@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from backend.core.events import (
     EventBus,
+    TRAINING_PROGRESS,
     TRAINING_COMPLETED,
     TRAINING_ERROR,
     RESOURCE_WARNING,
@@ -410,4 +411,85 @@ class TestEventSubscriptions:
         assert history[0].level == NotificationLevel.ERROR
         assert history[0].category == NotificationCategory.INFERENCE
         assert "GPU out of memory" in history[0].message
+        await bus.stop()
+
+
+class TestTrainingEventBroadcasts:
+    """Training events are broadcast directly for real-time UI updates."""
+
+    @pytest.mark.asyncio
+    async def test_training_progress_broadcasts_raw_event(self, manager, mock_connection_manager):
+        """training.progress broadcasts a raw event in addition to notification."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+
+        await bus.publish(TRAINING_PROGRESS, {
+            "current_epoch": 10,
+            "total_epochs": 50,
+            "progress_pct": 20.0,
+            "metrics": {"loss": 0.42},
+            "message": "Epoch 10/50",
+        })
+
+        # Should have two broadcast_event calls: one for "training.progress", one for "notification"
+        calls = mock_connection_manager.broadcast_event.call_args_list
+        event_types = [c.args[0] for c in calls]
+        assert "training.progress" in event_types
+        assert "notification" in event_types
+
+        # Verify training.progress payload has correct fields
+        progress_call = next(c for c in calls if c.args[0] == "training.progress")
+        payload = progress_call.args[1]
+        assert payload["current_epoch"] == 10
+        assert payload["total_epochs"] == 50
+        assert payload["progress_pct"] == 20.0
+        assert payload["loss"] == 0.42
+        assert payload["metrics"] == {"loss": 0.42}
+        await bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_training_completed_broadcasts_raw_event(self, manager, mock_connection_manager):
+        """training.completed broadcasts a raw event in addition to notification."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+
+        await bus.publish(TRAINING_COMPLETED, {
+            "model_name": "my-model",
+            "epochs_completed": 50,
+            "best_map50": 0.85,
+            "message": "Done",
+        })
+
+        calls = mock_connection_manager.broadcast_event.call_args_list
+        event_types = [c.args[0] for c in calls]
+        assert "training.completed" in event_types
+
+        completed_call = next(c for c in calls if c.args[0] == "training.completed")
+        payload = completed_call.args[1]
+        assert payload["model_name"] == "my-model"
+        assert payload["epochs_completed"] == 50
+        assert payload["best_map50"] == 0.85
+        await bus.stop()
+
+    @pytest.mark.asyncio
+    async def test_training_error_broadcasts_raw_event(self, manager, mock_connection_manager):
+        """training.error broadcasts a raw event in addition to notification."""
+        bus = EventBus()
+        await bus.start()
+        manager.setup_event_subscriptions(bus)
+
+        await bus.publish(TRAINING_ERROR, {
+            "error": "CUDA out of memory",
+            "message": "Training failed: CUDA out of memory",
+        })
+
+        calls = mock_connection_manager.broadcast_event.call_args_list
+        event_types = [c.args[0] for c in calls]
+        assert "training.error" in event_types
+
+        error_call = next(c for c in calls if c.args[0] == "training.error")
+        payload = error_call.args[1]
+        assert payload["error"] == "CUDA out of memory"
         await bus.stop()

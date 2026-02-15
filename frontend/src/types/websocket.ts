@@ -46,10 +46,25 @@ export interface WsPongMessage extends WsMessage {
 /** Training progress event from /ws/events. */
 export interface WsTrainingProgressMessage extends WsMessage {
   type: 'training.progress'
-  epoch: number
+  current_epoch: number
   total_epochs: number
+  progress_pct: number
+  metrics: Record<string, number>
   loss: number
-  eta: string | null
+}
+
+/** Training completed event from /ws/events. */
+export interface WsTrainingCompletedMessage extends WsMessage {
+  type: 'training.completed'
+  model_name: string
+  epochs_completed: number
+  best_map50: number | null
+}
+
+/** Training error event from /ws/events. */
+export interface WsTrainingErrorMessage extends WsMessage {
+  type: 'training.error'
+  error: string
 }
 
 /** Capture event from /ws/events. */
