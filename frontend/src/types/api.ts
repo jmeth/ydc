@@ -248,6 +248,11 @@ export interface DownloadPretrainedRequest {
   name?: string
 }
 
+/** Request body for PUT /api/datasets/{name}. */
+export interface UpdateDatasetRequest {
+  classes: string[]
+}
+
 /** Generic message response. */
 export interface MessageResponse {
   message: string

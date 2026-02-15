@@ -15,6 +15,7 @@ import type {
   ImageListResponse,
   LabelsResponse,
   AnnotationResponse,
+  UpdateDatasetRequest,
 } from '@/types/api'
 
 interface DatasetFilter {
@@ -173,6 +174,19 @@ export const useDatasetStore = defineStore('dataset', {
       await del(`/datasets/${name}`)
       if (this.currentDataset === name) this.reset()
       await this.fetchDatasets()
+    },
+
+    /**
+     * Update the class list for the current dataset.
+     *
+     * @param classes - New ordered list of class names
+     */
+    async updateClasses(classes: string[]) {
+      if (!this.currentDataset) return
+      const { put } = useApi()
+      const body: UpdateDatasetRequest = { classes }
+      const res = await put<DatasetResponse>(`/datasets/${this.currentDataset}`, body)
+      this.currentDatasetInfo = res
     },
 
     /**

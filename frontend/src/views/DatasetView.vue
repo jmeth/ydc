@@ -13,6 +13,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useDatasetStore } from '@/stores/dataset'
 import type { ImageInfo } from '@/types/models'
 import DatasetSelector from '@/components/dataset/DatasetSelector.vue'
+import ClassLabelManager from '@/components/dataset/ClassLabelManager.vue'
 import ImageGrid from '@/components/dataset/ImageGrid.vue'
 import BulkActions from '@/components/dataset/BulkActions.vue'
 import ImageEditor from '@/components/dataset/ImageEditor.vue'
@@ -102,16 +103,27 @@ onMounted(async () => {
         @clear="clearSelection"
       />
 
-      <div v-if="datasetStore.loading" class="empty-state">
-        <div class="loading-spinner"></div>
-        <div class="empty-state-text">Loading dataset...</div>
-      </div>
+      <div class="dataset-content">
+        <div class="dataset-main">
+          <div v-if="datasetStore.loading" class="empty-state">
+            <div class="loading-spinner"></div>
+            <div class="empty-state-text">Loading dataset...</div>
+          </div>
 
-      <ImageGrid
-        v-else
-        @select="onSelectImage"
-        @open="onOpenImage"
-      />
+          <ImageGrid
+            v-else
+            @select="onSelectImage"
+            @open="onOpenImage"
+          />
+        </div>
+
+        <div class="dataset-sidebar">
+          <ClassLabelManager
+            v-if="datasetStore.currentDatasetInfo"
+            :classes="datasetStore.currentDatasetInfo.classes"
+          />
+        </div>
+      </div>
     </template>
 
     <div v-else class="empty-state">
@@ -141,5 +153,28 @@ onMounted(async () => {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+.dataset-content {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.dataset-main {
+  min-width: 0;
+}
+
+.dataset-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .dataset-content {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

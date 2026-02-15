@@ -144,7 +144,11 @@ class DatasetManager:
 
     async def update_dataset(self, name: str, classes: list[str]) -> DatasetInfo:
         """
-        Update dataset classes.
+        Update dataset classes and remap all annotation class IDs.
+
+        When classes are removed or reordered, existing annotation files
+        must be updated so class_id values match the new class list.
+        Annotations referencing a removed class are deleted.
 
         Args:
             name: Dataset identifier.
@@ -160,8 +164,24 @@ class DatasetManager:
         if not classes:
             raise ValidationError("Classes list cannot be empty")
 
-        # Ensure dataset exists before updating
-        await self.get_dataset(name)
+        # Get current dataset info (raises NotFoundError if missing)
+        info = await self.get_dataset(name)
+        old_classes = info.classes
+
+        # Build mapping from old class index to new class index.
+        # If an old class name no longer exists, it maps to None (delete).
+        new_index_by_name = {c: i for i, c in enumerate(classes)}
+        remap: dict[int, int | None] = {}
+        for old_idx, old_name in enumerate(old_classes):
+            remap[old_idx] = new_index_by_name.get(old_name)
+
+        # Only remap annotations if the mapping actually changes IDs
+        needs_remap = any(
+            remap.get(i) != i for i in range(len(old_classes))
+        ) or len(old_classes) != len(classes)
+
+        if needs_remap:
+            await self._remap_annotations(name, remap)
 
         try:
             await self._datasets.update_classes(name, classes)
@@ -169,6 +189,44 @@ class DatasetManager:
             raise NotFoundError("Dataset", name)
 
         return await self.get_dataset(name)
+
+    async def _remap_annotations(
+        self,
+        name: str,
+        remap: dict[int, int | None],
+    ) -> None:
+        """
+        Remap class IDs in all annotation files for a dataset.
+
+        Iterates every image across all splits, loads its labels,
+        applies the ID mapping, and saves. Annotations whose old
+        class_id maps to None (class was removed) are deleted.
+
+        Args:
+            name: Dataset identifier.
+            remap: Mapping from old class_id to new class_id, or None to delete.
+        """
+        for split in ("train", "val", "test"):
+            images = await self._images.list(name, split)
+            for img in images:
+                annotations = await self._labels.load(name, split, img.filename)
+                if not annotations:
+                    continue
+
+                updated = []
+                for ann in annotations:
+                    new_id = remap.get(ann.class_id)
+                    if new_id is not None:
+                        updated.append(Annotation(
+                            class_id=new_id,
+                            x=ann.x,
+                            y=ann.y,
+                            width=ann.width,
+                            height=ann.height,
+                        ))
+                    # else: class was removed, drop this annotation
+
+                await self._labels.save(name, split, img.filename, updated)
 
     # --- Images ---
 

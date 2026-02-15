@@ -179,6 +179,102 @@ class TestUpdateDataset:
         with pytest.raises(ValidationError, match="Classes list cannot be empty"):
             await manager.update_dataset("test-ds", [])
 
+    async def test_remove_class_remaps_annotations(self, manager, sample_image):
+        """Removing a middle class decrements higher class IDs in labels."""
+        await manager.create_dataset("test-ds", ["cat", "dog", "bird"])
+        await manager.add_image("test-ds", "train", "img.jpg", sample_image)
+
+        # Save annotations: cat(0), dog(1), bird(2)
+        await manager.save_labels("test-ds", "train", "img.jpg", [
+            Annotation(class_id=0, x=0.5, y=0.5, width=0.2, height=0.2),
+            Annotation(class_id=1, x=0.3, y=0.3, width=0.1, height=0.1),
+            Annotation(class_id=2, x=0.7, y=0.7, width=0.3, height=0.3),
+        ])
+
+        # Remove "dog" (index 1) — bird should shift from 2 to 1
+        await manager.update_dataset("test-ds", ["cat", "bird"])
+
+        labels = await manager.get_labels("test-ds", "train", "img.jpg")
+        assert len(labels) == 2
+        assert labels[0].class_id == 0  # cat stays 0
+        assert labels[1].class_id == 1  # bird shifted from 2 to 1
+
+    async def test_remove_class_deletes_its_annotations(self, manager, sample_image):
+        """Annotations referencing a removed class are deleted."""
+        await manager.create_dataset("test-ds", ["cat", "dog", "bird"])
+        await manager.add_image("test-ds", "train", "img.jpg", sample_image)
+
+        # All annotations reference "dog" (index 1)
+        await manager.save_labels("test-ds", "train", "img.jpg", [
+            Annotation(class_id=1, x=0.5, y=0.5, width=0.2, height=0.2),
+            Annotation(class_id=1, x=0.3, y=0.3, width=0.1, height=0.1),
+        ])
+
+        # Remove "dog" — all annotations should be deleted
+        await manager.update_dataset("test-ds", ["cat", "bird"])
+
+        labels = await manager.get_labels("test-ds", "train", "img.jpg")
+        assert len(labels) == 0
+
+    async def test_add_class_preserves_annotations(self, manager, sample_image):
+        """Adding a new class doesn't change existing annotation IDs."""
+        await manager.create_dataset("test-ds", ["cat", "dog"])
+        await manager.add_image("test-ds", "train", "img.jpg", sample_image)
+
+        await manager.save_labels("test-ds", "train", "img.jpg", [
+            Annotation(class_id=0, x=0.5, y=0.5, width=0.2, height=0.2),
+            Annotation(class_id=1, x=0.3, y=0.3, width=0.1, height=0.1),
+        ])
+
+        # Append "bird" — existing IDs unchanged
+        await manager.update_dataset("test-ds", ["cat", "dog", "bird"])
+
+        labels = await manager.get_labels("test-ds", "train", "img.jpg")
+        assert len(labels) == 2
+        assert labels[0].class_id == 0
+        assert labels[1].class_id == 1
+
+    async def test_remap_across_splits(self, manager, sample_image):
+        """Annotation remapping applies to all splits."""
+        await manager.create_dataset("test-ds", ["cat", "dog", "bird"])
+        await manager.add_image("test-ds", "train", "img1.jpg", sample_image)
+        await manager.add_image("test-ds", "val", "img2.jpg", sample_image)
+
+        await manager.save_labels("test-ds", "train", "img1.jpg", [
+            Annotation(class_id=2, x=0.5, y=0.5, width=0.2, height=0.2),
+        ])
+        await manager.save_labels("test-ds", "val", "img2.jpg", [
+            Annotation(class_id=2, x=0.3, y=0.3, width=0.1, height=0.1),
+        ])
+
+        # Remove "dog" (index 1) — bird shifts from 2 to 1
+        await manager.update_dataset("test-ds", ["cat", "bird"])
+
+        train_labels = await manager.get_labels("test-ds", "train", "img1.jpg")
+        val_labels = await manager.get_labels("test-ds", "val", "img2.jpg")
+        assert train_labels[0].class_id == 1
+        assert val_labels[0].class_id == 1
+
+    async def test_reorder_classes_remaps_annotations(self, manager, sample_image):
+        """Reordering classes correctly remaps annotation IDs."""
+        await manager.create_dataset("test-ds", ["cat", "dog", "bird"])
+        await manager.add_image("test-ds", "train", "img.jpg", sample_image)
+
+        await manager.save_labels("test-ds", "train", "img.jpg", [
+            Annotation(class_id=0, x=0.5, y=0.5, width=0.2, height=0.2),
+            Annotation(class_id=1, x=0.3, y=0.3, width=0.1, height=0.1),
+            Annotation(class_id=2, x=0.7, y=0.7, width=0.3, height=0.3),
+        ])
+
+        # Reverse order: bird=0, dog=1, cat=2
+        await manager.update_dataset("test-ds", ["bird", "dog", "cat"])
+
+        labels = await manager.get_labels("test-ds", "train", "img.jpg")
+        assert len(labels) == 3
+        assert labels[0].class_id == 2  # cat: 0 -> 2
+        assert labels[1].class_id == 1  # dog: 1 -> 1
+        assert labels[2].class_id == 0  # bird: 2 -> 0
+
 
 # --- Images ---
 
