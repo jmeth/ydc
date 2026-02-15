@@ -11,6 +11,10 @@
 import { useTrainingStore } from '@/stores/training'
 import { useNotificationStore } from '@/stores/notifications'
 
+const props = defineProps<{
+  selectedModel?: string | null
+}>()
+
 const emit = defineEmits<{
   select: [modelName: string]
 }>()
@@ -30,13 +34,14 @@ function formatDate(ts: number): string {
 }
 
 /**
- * Activate a model for inference.
+ * Activate a model for inference and select it.
  *
  * @param name - Model name to activate
  */
 async function activateModel(name: string) {
   try {
     await trainingStore.activateModel(name)
+    emit('select', name)
     notificationStore.showToast(`Activated model "${name}"`, 'success')
   } catch {
     notificationStore.showToast('Failed to activate model', 'error')
@@ -71,6 +76,7 @@ async function deleteModel(name: string) {
       v-for="model in trainingStore.models"
       :key="model.name"
       class="model-row"
+      :class="{ 'model-row-selected': props.selectedModel === model.name }"
       @click="emit('select', model.name)"
     >
       <div class="model-info">
@@ -127,6 +133,14 @@ async function deleteModel(name: string) {
   margin: 0 -1rem;
   padding-left: 1rem;
   padding-right: 1rem;
+}
+
+.model-row-selected {
+  background: var(--color-bg);
+  margin: 0 -1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-left: 3px solid var(--color-primary, #4fc3f7);
 }
 
 .model-name {

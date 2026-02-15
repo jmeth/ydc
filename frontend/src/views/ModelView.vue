@@ -90,6 +90,14 @@ onMounted(async () => {
   if (inferenceStore.sourceFeedId) {
     selectedFeedId.value = inferenceStore.sourceFeedId
   }
+
+  // Auto-select the active model if one exists
+  if (!selectedModelName.value) {
+    const active = trainingStore.models.find((m) => m.isActive)
+    if (active) {
+      selectedModelName.value = active.name
+    }
+  }
 })
 </script>
 
@@ -98,7 +106,7 @@ onMounted(async () => {
     <!-- Left: Download form + Model list -->
     <div class="model-sidebar">
       <DownloadModelForm />
-      <ModelList @select="onSelectModel" />
+      <ModelList :selected-model="selectedModelName" @select="onSelectModel" />
     </div>
 
     <!-- Center: Video + controls -->
