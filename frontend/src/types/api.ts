@@ -268,6 +268,9 @@ export interface ModelListResponse {
   count: number
 }
 
+/** Response for POST /api/models/import (same shape as ModelResponse). */
+export type ImportModelResponse = ModelResponse
+
 /** Request body for POST /api/models/pretrained. */
 export interface DownloadPretrainedRequest {
   model_id: string

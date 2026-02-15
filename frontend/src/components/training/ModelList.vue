@@ -3,11 +3,13 @@
  * Table/card list of trained models.
  *
  * Displays model name, base model, dataset, date, epochs, mAP@50,
- * active badge. Provides activate/delete actions per model.
+ * active badge. Provides activate/delete/export actions per model
+ * and an import button in the header.
  *
  * Emits:
  *   select - When a model row is clicked (model name)
  */
+import { ref } from 'vue'
 import { useTrainingStore } from '@/stores/training'
 import { useNotificationStore } from '@/stores/notifications'
 
@@ -21,6 +23,9 @@ const emit = defineEmits<{
 
 const trainingStore = useTrainingStore()
 const notificationStore = useNotificationStore()
+
+/** Hidden file input ref for import. */
+const importInput = ref<HTMLInputElement | null>(null)
 
 /** Format a unix timestamp. */
 function formatDate(ts: number): string {
@@ -62,11 +67,50 @@ async function deleteModel(name: string) {
     notificationStore.showToast('Failed to delete model', 'error')
   }
 }
+
+/**
+ * Export a model as a zip download.
+ *
+ * @param name - Model name to export
+ */
+function exportModel(name: string) {
+  trainingStore.exportModel(name)
+}
+
+/**
+ * Handle file input change for model import.
+ * Reads the selected zip file and uploads it.
+ */
+async function handleImportFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    await trainingStore.importModel(file)
+    notificationStore.showToast('Model imported successfully', 'success')
+  } catch {
+    notificationStore.showToast('Failed to import model', 'error')
+  }
+  // Reset input so the same file can be re-selected
+  input.value = ''
+}
 </script>
 
 <template>
   <div class="model-list card">
-    <div class="card-header">Trained Models</div>
+    <div class="card-header">
+      <span>Trained Models</span>
+      <button class="btn btn-sm btn-secondary" @click="importInput?.click()">
+        Import
+      </button>
+      <input
+        ref="importInput"
+        type="file"
+        accept=".zip"
+        style="display: none"
+        @change="handleImportFile"
+      />
+    </div>
 
     <div v-if="trainingStore.models.length === 0" class="empty-state">
       <div class="empty-state-text">No trained models yet</div>
@@ -104,6 +148,12 @@ async function deleteModel(name: string) {
           Activate
         </button>
         <button
+          class="btn btn-sm btn-secondary"
+          @click="exportModel(model.name)"
+        >
+          Export
+        </button>
+        <button
           class="btn btn-sm btn-danger"
           @click="deleteModel(model.name)"
         >
@@ -115,6 +165,12 @@ async function deleteModel(name: string) {
 </template>
 
 <style scoped>
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .model-row {
   display: flex;
   align-items: center;

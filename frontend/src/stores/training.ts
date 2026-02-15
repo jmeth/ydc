@@ -18,6 +18,7 @@ import type {
   MessageResponse,
   DownloadPretrainedRequest,
   AugmentationConfig,
+  ImportModelResponse,
 } from '@/types/api'
 
 interface TrainingProgress {
@@ -178,6 +179,33 @@ export const useTrainingStore = defineStore('training', {
     async activateModel(modelName: string) {
       const { put } = useApi()
       await put<MessageResponse>(`/models/${modelName}/activate`, {})
+      await this.fetchModels()
+    },
+
+    /**
+     * Export a trained model as a zip download.
+     *
+     * Opens a browser download via direct navigation — no fetch needed
+     * since the backend returns a FileResponse.
+     *
+     * @param modelName - Model name to export
+     */
+    exportModel(modelName: string) {
+      window.location.href = `/api/models/${encodeURIComponent(modelName)}/export`
+    },
+
+    /**
+     * Import a trained model from a zip file upload.
+     *
+     * @param file - Zip file containing model weights and metadata
+     * @param name - Optional override name for the imported model
+     */
+    async importModel(file: File, name?: string) {
+      const { upload } = useApi()
+      const path = name
+        ? `/models/import?name=${encodeURIComponent(name)}`
+        : '/models/import'
+      await upload<ImportModelResponse>(path, file)
       await this.fetchModels()
     },
 

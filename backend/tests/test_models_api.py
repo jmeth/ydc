@@ -6,6 +6,9 @@ mock TrainingManager (wrapping a mock ModelStore) to isolate API
 logic from persistence operations.
 """
 
+import io
+import json
+import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -198,15 +201,110 @@ class TestActivateModel:
         models_manager._model_store.set_active.assert_called_once_with("model-b")
 
 
-# --- POST /api/models/{model_id}/export ---
+# --- GET /api/models/{model_id}/export ---
 
 class TestExportModel:
-    """Tests for POST /api/models/{model_id}/export."""
+    """Tests for GET /api/models/{model_id}/export."""
 
-    async def test_export_returns_501(self, client, models_manager):
-        """Export endpoint is still a stub returning 501."""
-        resp = await client.post("/api/models/my-model/export")
-        assert resp.status_code == 501
+    async def test_export_returns_zip(self, client, models_manager, tmp_path):
+        """Export returns a zip file download."""
+        # Set up mock: get() returns model info, export_zip() returns a real zip
+        models_manager._model_store.get = AsyncMock(
+            return_value=_make_model_info("my-model")
+        )
+        zip_path = tmp_path / "my-model.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("best.pt", b"fake weights")
+            zf.writestr("model_meta.json", '{"name": "my-model"}')
+        models_manager._model_store.export_zip = AsyncMock(return_value=zip_path)
+
+        resp = await client.get("/api/models/my-model/export")
+        assert resp.status_code == 200
+        assert "application/zip" in resp.headers.get("content-type", "")
+
+    async def test_export_nonexistent_returns_404(self, client, models_manager):
+        """Export returns 404 for nonexistent model."""
+        models_manager._model_store.get = AsyncMock(return_value=None)
+
+        resp = await client.get("/api/models/nonexistent/export")
+        assert resp.status_code == 404
+
+
+# --- POST /api/models/import ---
+
+class TestImportModel:
+    """Tests for POST /api/models/import."""
+
+    def _make_zip_bytes(self, meta=None):
+        """
+        Create an in-memory zip file with best.pt and optional metadata.
+
+        Args:
+            meta: Optional metadata dict for model_meta.json.
+
+        Returns:
+            Bytes of the zip file.
+        """
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("best.pt", b"imported weights")
+            if meta is not None:
+                zf.writestr("model_meta.json", json.dumps(meta))
+        return buf.getvalue()
+
+    async def test_import_success(self, client, models_manager):
+        """Import returns the newly registered model."""
+        info = _make_model_info("imported-model")
+        models_manager._model_store.import_zip = AsyncMock(return_value=info)
+
+        zip_bytes = self._make_zip_bytes(meta={"name": "imported-model"})
+        resp = await client.post(
+            "/api/models/import",
+            files={"file": ("imported-model.zip", zip_bytes, "application/zip")},
+        )
+        assert resp.status_code == 200
         data = resp.json()
-        assert "error" in data
-        assert "detail" in data
+        assert data["name"] == "imported-model"
+
+    async def test_import_with_name_override(self, client, models_manager):
+        """Import passes the name query parameter to import_zip."""
+        info = _make_model_info("custom-name")
+        models_manager._model_store.import_zip = AsyncMock(return_value=info)
+
+        zip_bytes = self._make_zip_bytes()
+        resp = await client.post(
+            "/api/models/import?name=custom-name",
+            files={"file": ("model.zip", zip_bytes, "application/zip")},
+        )
+        assert resp.status_code == 200
+        models_manager._model_store.import_zip.assert_called_once()
+        call_kwargs = models_manager._model_store.import_zip.call_args
+        assert call_kwargs.kwargs.get("name") == "custom-name"
+
+    async def test_import_duplicate_returns_409(self, client, models_manager):
+        """Import returns 409 when model name already exists."""
+        models_manager._model_store.import_zip = AsyncMock(
+            side_effect=ValueError("Model 'dup' already exists")
+        )
+
+        zip_bytes = self._make_zip_bytes(meta={"name": "dup"})
+        resp = await client.post(
+            "/api/models/import",
+            files={"file": ("dup.zip", zip_bytes, "application/zip")},
+        )
+        assert resp.status_code == 409
+        assert "already exists" in resp.json()["error"]
+
+    async def test_import_invalid_zip_returns_400(self, client, models_manager):
+        """Import returns 400 when zip is missing required files."""
+        models_manager._model_store.import_zip = AsyncMock(
+            side_effect=FileNotFoundError("Zip archive missing required 'best.pt'")
+        )
+
+        zip_bytes = self._make_zip_bytes()
+        resp = await client.post(
+            "/api/models/import",
+            files={"file": ("bad.zip", zip_bytes, "application/zip")},
+        )
+        assert resp.status_code == 400
+        assert "best.pt" in resp.json()["error"]

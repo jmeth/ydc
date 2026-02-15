@@ -125,3 +125,45 @@ class ModelStore(ABC):
             ModelInfo for the active model, or None if no model is active.
         """
         ...
+
+    @abstractmethod
+    async def export_zip(self, name: str, output_dir: Path) -> Path:
+        """
+        Export a model as a zip archive.
+
+        Creates a zip containing the model weights, training config (if
+        present), and a model_meta.json with registry metadata.
+
+        Args:
+            name: Model identifier.
+            output_dir: Directory where the zip file will be written.
+
+        Returns:
+            Path to the created zip file.
+
+        Raises:
+            FileNotFoundError: If the model doesn't exist.
+        """
+        ...
+
+    @abstractmethod
+    async def import_zip(self, zip_path: Path, name: str | None = None) -> ModelInfo:
+        """
+        Import a model from a zip archive.
+
+        Reads model_meta.json for metadata, extracts weights and optional
+        training config, and registers the model in the store.
+
+        Args:
+            zip_path: Path to the zip archive to import.
+            name: Override name for the imported model. If None, uses the
+                  name from model_meta.json or the zip filename stem.
+
+        Returns:
+            ModelInfo for the newly imported model.
+
+        Raises:
+            ValueError: If a model with the resolved name already exists.
+            FileNotFoundError: If zip_path doesn't exist or lacks required files.
+        """
+        ...

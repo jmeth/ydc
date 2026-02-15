@@ -19,8 +19,7 @@ STUB_ENDPOINTS = [
     ("POST", "/api/datasets/test-ds/review/bulk"),
     # Training endpoints removed — now implemented (see test_training_api.py)
     # Models endpoints removed — now implemented (see test_models_api.py)
-    # Export is still a stub
-    ("POST", "/api/models/test-model/export"),
+    # Export removed — now implemented (see test_models_api.py)
     # Notifications endpoints removed — now implemented (see test_notifications_api.py)
     # System (resources is a stub)
     ("PUT", "/api/system/config"),

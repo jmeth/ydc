@@ -8,13 +8,14 @@ and download pretrained models. Uses TrainingManager as DI dependency
 
 import asyncio
 import logging
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 
 from backend.core.exceptions import NotFoundError
-from backend.models.common import ErrorResponse, NotImplementedResponse
+from backend.models.common import ErrorResponse
 from backend.models.training import (
     DownloadPretrainedRequest,
     MessageResponse,
@@ -29,8 +30,6 @@ router = APIRouter()
 
 # Module-level DI — set from app lifespan
 _training_manager: TrainingManager | None = None
-
-STUB = NotImplementedResponse()
 
 
 def set_training_manager(manager: TrainingManager | None) -> None:
@@ -265,12 +264,96 @@ def _download_pretrained_model(model_id: str) -> Path:
     raise FileNotFoundError(f"Could not locate downloaded weights for '{model_id}'")
 
 
-@router.post(
+@router.get(
     "/{model_id}/export",
     summary="Export model",
-    description="Export a trained model for deployment.",
-    responses={501: {"model": NotImplementedResponse}},
+    description=(
+        "Export a trained model as a downloadable zip archive containing "
+        "the model weights, training config (if present), and metadata."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Model not found"},
+    },
 )
-async def export_model(model_id: str) -> JSONResponse:
-    """Export a model (not yet implemented)."""
-    return JSONResponse(status_code=501, content=STUB.model_dump())
+async def export_model(model_id: str) -> FileResponse:
+    """
+    Export a model as a zip file download.
+
+    Creates a zip archive containing best.pt, training_config.yaml
+    (if present), and model_meta.json, then returns it as a download.
+
+    Args:
+        model_id: Model identifier.
+
+    Returns:
+        FileResponse with the zip archive.
+    """
+    mgr = _get_manager()
+    model_store = mgr._model_store
+
+    info = await model_store.get(model_id)
+    if info is None:
+        raise NotFoundError("Model", model_id)
+
+    tmp_dir = Path(tempfile.mkdtemp())
+    zip_path = await model_store.export_zip(model_id, tmp_dir)
+
+    return FileResponse(
+        path=str(zip_path),
+        filename=f"{model_id}.zip",
+        media_type="application/zip",
+    )
+
+
+@router.post(
+    "/import",
+    summary="Import model",
+    description=(
+        "Import a trained model from a zip archive. The zip must contain "
+        "a best.pt weights file. A model_meta.json with metadata is optional."
+    ),
+    response_model=ModelResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid zip file"},
+        409: {"model": ErrorResponse, "description": "Model name already exists"},
+    },
+)
+async def import_model(file: UploadFile, name: str | None = None) -> ModelResponse | JSONResponse:
+    """
+    Import a model from an uploaded zip archive.
+
+    Accepts a zip file, writes it to a temp location, delegates to
+    ModelStore.import_zip(), then returns the registered model info.
+
+    Args:
+        file: Uploaded zip file.
+        name: Optional override name for the imported model.
+
+    Returns:
+        ModelResponse for the newly imported model.
+    """
+    mgr = _get_manager()
+    model_store = mgr._model_store
+
+    # Write upload to a temp file
+    tmp_dir = Path(tempfile.mkdtemp())
+    zip_path = tmp_dir / (file.filename or "upload.zip")
+    with open(zip_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    try:
+        info = await model_store.import_zip(zip_path, name=name)
+    except FileNotFoundError as exc:
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(exc)},
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={"error": str(exc)},
+        )
+
+    logger.info("Imported model '%s' from zip", info.name)
+    return _model_info_to_response(info)
