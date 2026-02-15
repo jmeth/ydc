@@ -3,7 +3,11 @@ REST API integration tests for the inference endpoints.
 
 Uses the inference_manager fixture (mock FeedManager + patched ultralytics)
 to test all five endpoints: start, stop, status, prompts, and model switch.
+Also tests model path resolution for locally trained models.
 """
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -177,3 +181,97 @@ class TestSwitchModel:
             "model_type": "yolo_world",
         })
         assert response.status_code == 404
+
+
+class TestModelPathResolution:
+    """Tests for resolving model names to weights file paths."""
+
+    @pytest.fixture
+    def model_store_mock(self):
+        """
+        Mock ModelStore injected into the inference API for path resolution.
+
+        Returns the mock so tests can configure load() behavior.
+        Cleans up by resetting the module-level reference.
+        """
+        from backend.api.inference import set_model_store
+
+        store = MagicMock()
+        store.load = AsyncMock()
+        set_model_store(store)
+        yield store
+        set_model_store(None)
+
+    @pytest.mark.asyncio
+    async def test_start_resolves_trained_model_path(
+        self, client, inference_manager, model_store_mock
+    ):
+        """Start inference with a trained model name resolves to weights path."""
+        weights_path = Path("/data/models/my-model/best.pt")
+        model_store_mock.load.return_value = weights_path
+
+        response = await client.post("/api/inference/start", json={
+            "source_feed_id": "test-feed-1234",
+            "model_name": "my-model",
+            "model_type": "fine_tuned",
+        })
+        assert response.status_code == 201
+        # The API should have resolved "my-model" via model_store.load()
+        model_store_mock.load.assert_called_once_with("my-model")
+        # Response still shows the original logical name
+        assert response.json()["model_name"] == "my-model"
+
+    @pytest.mark.asyncio
+    async def test_start_falls_back_for_pretrained_model(
+        self, client, inference_manager, model_store_mock
+    ):
+        """Start inference with a pretrained model name passes through if not in store."""
+        model_store_mock.load.side_effect = FileNotFoundError("Not in store")
+
+        response = await client.post("/api/inference/start", json={
+            "source_feed_id": "test-feed-1234",
+            "model_name": "yolo11n",
+            "model_type": "fine_tuned",
+        })
+        assert response.status_code == 201
+        # The model name is passed through since it's not in the store
+        assert response.json()["model_name"] == "yolo11n"
+
+    @pytest.mark.asyncio
+    async def test_switch_model_resolves_trained_model_path(
+        self, client, inference_manager, model_store_mock
+    ):
+        """Switch model resolves the new model name to weights path."""
+        # First start with no model store resolution needed
+        model_store_mock.load.side_effect = FileNotFoundError("Not in store")
+        start_resp = await client.post("/api/inference/start", json={
+            "source_feed_id": "test-feed-1234",
+        })
+        output_id = start_resp.json()["output_feed_id"]
+
+        # Now switch to a trained model — should resolve the path
+        weights_path = Path("/data/models/fine-tuned-v2/best.pt")
+        model_store_mock.load.side_effect = None
+        model_store_mock.load.return_value = weights_path
+
+        response = await client.put("/api/inference/model", json={
+            "output_feed_id": output_id,
+            "model_name": "fine-tuned-v2",
+            "model_type": "fine_tuned",
+        })
+        assert response.status_code == 200
+        assert response.json()["status"] == "switched"
+        # Verify model_store.load was called for the switch
+        model_store_mock.load.assert_called_with("fine-tuned-v2")
+
+    @pytest.mark.asyncio
+    async def test_no_model_store_passes_name_through(self, client, inference_manager):
+        """Without a model store, model name passes through unchanged."""
+        # inference_manager fixture does NOT set up model_store
+        response = await client.post("/api/inference/start", json={
+            "source_feed_id": "test-feed-1234",
+            "model_name": "custom-model",
+            "model_type": "fine_tuned",
+        })
+        assert response.status_code == 201
+        assert response.json()["model_name"] == "custom-model"

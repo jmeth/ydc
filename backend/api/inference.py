@@ -4,6 +4,9 @@ Inference API router — endpoints for managing inference sessions.
 Provides REST endpoints to start/stop inference, query session status,
 update YOLO-World prompts, and switch models. Uses DI via
 set_inference_manager() called from app lifespan.
+
+For locally trained models, resolves the model's logical name to its
+weights file path via ModelStore before passing to the InferenceManager.
 """
 
 import logging
@@ -24,6 +27,7 @@ from backend.models.inference import (
     SwitchModelRequest,
     UpdatePromptsRequest,
 )
+from backend.persistence.model_store import ModelStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,7 @@ router = APIRouter()
 
 # Module-level DI — set from app lifespan
 _inference_manager: InferenceManager | None = None
+_model_store: ModelStore | None = None
 
 
 def set_inference_manager(manager: InferenceManager | None) -> None:
@@ -47,6 +52,20 @@ def set_inference_manager(manager: InferenceManager | None) -> None:
     _inference_manager = manager
 
 
+def set_model_store(store: ModelStore | None) -> None:
+    """
+    Inject the ModelStore instance for resolving model names to paths.
+
+    Called from the app lifespan on startup (with instance) and
+    teardown (with None).
+
+    Args:
+        store: The ModelStore instance, or None to reset.
+    """
+    global _model_store
+    _model_store = store
+
+
 def _get_manager() -> InferenceManager:
     """
     Get the injected InferenceManager, raising 500 if not initialized.
@@ -57,6 +76,33 @@ def _get_manager() -> InferenceManager:
     if _inference_manager is None:
         raise RuntimeError("InferenceManager not initialized")
     return _inference_manager
+
+
+async def _resolve_model_path(model_name: str) -> str:
+    """
+    Resolve a model's logical name to its weights file path.
+
+    Checks the ModelStore for a registered model with the given name.
+    If found, returns the path to its weights file. Otherwise falls
+    back to the original name (which may be a pretrained model identifier
+    like 'yolo11n' that ultralytics can resolve on its own).
+
+    Args:
+        model_name: Model logical name or ultralytics identifier.
+
+    Returns:
+        File path to weights if found in store, otherwise the original name.
+    """
+    if _model_store is None:
+        return model_name
+
+    try:
+        weights_path = await _model_store.load(model_name)
+        logger.debug("Resolved model '%s' to path: %s", model_name, weights_path)
+        return str(weights_path)
+    except FileNotFoundError:
+        # Not in the store — assume it's a pretrained model identifier
+        return model_name
 
 
 @router.post(
@@ -76,13 +122,16 @@ async def start_inference(request: StartInferenceRequest) -> StartInferenceRespo
 
     Creates a derived feed with YOLO detection results. The output_feed_id
     can be subscribed to via WebSocket for real-time detection streaming.
+    For locally trained models, resolves the logical name to the weights path.
     """
     mgr = _get_manager()
 
     model_type = ModelType(request.model_type)
+    # Resolve model name to file path for locally trained models
+    resolved_path = await _resolve_model_path(request.model_name)
     output_feed_id = mgr.start_inference(
         source_feed_id=request.source_feed_id,
-        model_name=request.model_name,
+        model_name=resolved_path,
         model_type=model_type,
         prompts=request.prompts,
         confidence_threshold=request.confidence_threshold,
@@ -166,14 +215,17 @@ async def switch_model(request: SwitchModelRequest) -> dict:
     Switch the model on an active inference session.
 
     Stops the old session and starts a new one with the specified model.
+    Resolves locally trained model names to weights file paths.
     Returns the new output_feed_id.
     """
     mgr = _get_manager()
 
     model_type = ModelType(request.model_type)
+    # Resolve model name to file path for locally trained models
+    resolved_path = await _resolve_model_path(request.model_name)
     new_output_id = mgr.switch_model(
         request.output_feed_id,
-        request.model_name,
+        resolved_path,
         model_type,
         request.prompts,
     )

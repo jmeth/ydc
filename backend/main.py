@@ -78,8 +78,9 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
     )
 
-    from backend.api.inference import set_inference_manager
+    from backend.api.inference import set_inference_manager, set_model_store
     set_inference_manager(inference_manager)
+    set_model_store(stores.model)
 
     # Initialize dataset subsystem
     from backend.dataset import set_dataset_manager
@@ -139,6 +140,7 @@ async def lifespan(app: FastAPI):
     set_training_api_manager(None)
     set_models_api_manager(None)
     set_dataset_manager(None)
+    set_model_store(None)
     set_stores(None)
     await event_bus.stop()
 
