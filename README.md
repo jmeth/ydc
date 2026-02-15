@@ -1,200 +1,222 @@
 # YOLO Dataset Creator
 
-A simple, browser-based tool for creating object detection datasets in YOLO format. Upload images or capture from webcam, draw bounding boxes, assign labels, and export datasets ready for training with [Ultralytics YOLO](https://docs.ultralytics.com/).
+A browser-based tool for the full object detection workflow: live video scanning with YOLO-World, automated dataset creation, model fine-tuning, and inference deployment.
 
-> **Note:** This project was vibecoded with [Claude](https://claude.ai) and is intended for **local/personal use only**. It has not been audited or tested for security and should not be deployed on public networks or in production environments.
+> **Note:** This project was vibecoded with [Claude](https://claude.ai) and is intended for **local/personal use only**. It has not been audited for security and should not be deployed on public networks.
 
 ![screenshot](./assets/screenshot.png)
 
 ## Features
 
-- **Image Import**: Upload images via file picker or drag-and-drop
-- **Webcam Capture**: Capture images directly from your webcam
-- **Bounding Box Editor**: Draw, move, and resize annotation boxes
-- **Label Management**: Create and manage class labels with custom colors
-- **Dataset Splits**: Organize images into train/val/test sets
-- **Keyboard Shortcuts**: Fast annotation workflow with hotkeys
-- **YOLO Format Export**: Saves directly in YOLO-compatible format with `data.yaml`
+**Scan Mode** — Point a camera, describe what to detect with text prompts, and YOLO-World finds it. Frames are captured automatically or on demand, complete with auto-generated annotations.
 
-## Installation
+**Dataset Mode** — Review, edit, and organize captured images and bounding boxes. Manage labels, assign train/val/test splits, import/export ZIP archives, and refine annotations before training.
 
-### Option 1: Docker (Recommended)
+**Train Mode** — Fine-tune YOLO models on your datasets with configurable hyperparameters. Monitor training progress in real time via WebSocket updates.
+
+**Model Mode** — Run your trained models against live feeds for inference without capture, or swap between base and fine-tuned models on the fly.
+
+### Additional Capabilities
+
+- Real-time WebSocket video streaming with bounding box overlays
+- Dual-mode capture: raw frames or inference frames with annotations
+- Centralized notification system (toast/banner alerts for all subsystem events)
+- Filesystem-backed persistence with pluggable storage interfaces
+- Full REST API with OpenAPI documentation at `/api/docs`
+
+## Quick Start
+
+### Docker (Recommended)
 
 ```bash
-# Using docker-compose
-docker-compose up -d
-
-# Or build and run manually
-docker build -t yolo-dataset-creator .
-docker run -d \
-  -p 5000:5000 \
-  -v $(pwd)/datasets:/app/datasets \
-  --name yolo-dataset-creator \
-  yolo-dataset-creator
+docker compose up
 ```
 
-### Option 2: Python
+Open http://localhost in your browser. The frontend serves on port 80 and proxies API/WebSocket traffic to the backend automatically.
 
-Requirements: Python 3.8+
+**With GPU support** (requires [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)):
 
 ```bash
-cd yolo_dataset_creator
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+```
+
+**With the legacy Flask server** (port 5001):
+
+```bash
+docker compose --profile legacy up
+```
+
+### Local Development
+
+Requirements: Python 3.12+, Node.js 22+
+
+```bash
+# Backend
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
-python server.py
+uvicorn backend.main:app --reload --port 8000
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
 ```
 
-Open http://localhost:5000 in your browser.
+- Frontend: http://localhost:5173 (Vite dev server, proxies `/api` and `/ws` to backend)
+- Backend API docs: http://localhost:8000/docs
 
-## Usage
+### Running Tests
 
-### 1. Create a Dataset
-Click "New Dataset" and enter a name. This creates the YOLO directory structure:
-```
-datasets/my_dataset/
-├── data.yaml
-├── images/
-│   ├── train/
-│   ├── val/
-│   └── test/
-└── labels/
-    ├── train/
-    ├── val/
-    └── test/
+```bash
+source venv/bin/activate
+python -m pytest backend/tests/ -v
 ```
 
-### 2. Add Labels
-Click "+ Add" in the Labels panel to create class labels (e.g., "person", "car", "dog").
+## Architecture
 
-### 3. Import Images
-- **Upload**: Click "Upload" or drag images onto the canvas
-- **Webcam**: Click "Webcam" to capture images directly
-
-### 4. Annotate
-1. Select an image from the list
-2. Press `N` or click the box tool to enter draw mode
-3. Click and drag to draw a bounding box
-4. Select a label (click in Labels panel or press `1-9`)
-5. Press `Ctrl+S` to save
-
-### 5. Edit Annotations
-- **Select**: Click on a box to select it
-- **Move**: Drag a selected box to reposition
-- **Resize**: Drag corner or edge handles
-- **Change Label**: With box selected, click a label or press `1-9`
-- **Delete**: Press `Delete` or click × in the Annotations panel
-
-### 6. Organize Splits
-Use the Split dropdown to assign images to train/val/test sets.
-
-### 7. Export Dataset
-Click "Export ZIP" to download the complete dataset as a zip file. The export modal shows:
-- Dataset size and file count
-- Image distribution across splits
-- Warning for large datasets (>100MB)
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `1-9` | Select label / Change selected box label |
-| `N` | Draw mode |
-| `V` | Select mode |
-| `Delete` | Delete selected box |
-| `Ctrl+S` | Save annotations |
-| `←` `→` | Previous/Next image |
-| `+` `-` | Zoom in/out |
-| `Esc` | Cancel/Deselect |
-
-## YOLO Format
-
-Annotations are saved in YOLO format:
-- One `.txt` file per image with matching filename
-- Each line: `class_id x_center y_center width height`
-- Coordinates are normalized (0-1) relative to image dimensions
-
-Example label file:
 ```
-0 0.525 0.376 0.284 0.418
-1 0.735 0.298 0.193 0.337
+Browser ──HTTP/WS──▶ nginx (port 80)
+                        ├── Static files (Vue SPA)
+                        ├── /api/* ──▶ FastAPI (port 8000)
+                        └── /ws/*  ──▶ FastAPI (WebSocket)
 ```
 
-The `data.yaml` file is auto-generated:
-```yaml
-path: /path/to/dataset
-train: images/train
-val: images/val
-test: images/test
-nc: 2
-names:
-  0: person
-  1: car
-```
+| Layer | Technology |
+|-------|------------|
+| Frontend | Vue.js 3 + TypeScript + Vite + Pinia |
+| Backend | FastAPI + Pydantic + Uvicorn |
+| ML | Ultralytics YOLO / YOLO-World |
+| Video | OpenCV |
+| Deployment | Docker Compose + nginx reverse proxy |
 
-## Creating a Good Dataset
+### Subsystems
 
-A high-quality dataset is essential for training accurate models. Key principles:
+The backend is organized into independent subsystems that communicate via an in-process event bus:
 
-| Principle | Description |
-|-----------|-------------|
-| **Diversity** | Include varied lighting, angles, backgrounds, and object sizes |
-| **Balance** | Aim for similar numbers of examples per class |
-| **Accuracy** | Draw tight bounding boxes that fully contain objects |
-| **Quantity** | More data generally improves performance (aim for 100+ images per class) |
-| **Real-world match** | Training data should reflect your deployment environment |
-| **Negative examples** | Include images without objects to reduce false positives |
+| Subsystem | Purpose |
+|-----------|---------|
+| **Feeds** | Camera/RTSP input, ring buffers, derived inference feeds |
+| **Inference** | Model loading, per-frame detection, output feed production |
+| **Capture** | Interval/manual frame capture with auto-annotations |
+| **Dataset** | CRUD for datasets, images, labels, splits |
+| **Training** | Async fine-tuning jobs with progress reporting |
+| **Notifications** | WebSocket broadcast of system events |
+| **Persistence** | Filesystem storage with abstract interfaces |
 
-### Tips
-- Annotate objects even if partially occluded
-- Be consistent with labeling decisions across images
-- Use the train/val/test split (e.g., 70%/20%/10%)
-- Review annotations for errors before training
-
-### Further Reading
-- [Ultralytics: Tips for Best Training Results](https://docs.ultralytics.com/guides/model-training-tips/)
-- [Roboflow: How to Create a Good Dataset](https://blog.roboflow.com/tips-for-how-to-label-images/)
-- [Google ML: Data Preparation and Feature Engineering](https://developers.google.com/machine-learning/data-prep)
-- [CVAT Documentation: Annotation Best Practices](https://docs.cvat.ai/docs/manual/advanced/annotation-with-rectangles/)
-
-## Training with YOLO
-
-After creating your dataset, train with Ultralytics:
-
-```python
-from ultralytics import YOLO
-
-model = YOLO('yolov8n.pt')
-model.train(data='datasets/my_dataset/data.yaml', epochs=100)
-```
-
-## Export & Large Datasets
-
-The export feature creates a zip file containing the complete dataset structure.
-
-**Technical notes:**
-- Images are stored uncompressed in the zip (ZIP_STORED) since JPG/PNG are already compressed
-- The export modal shows dataset size before download to avoid surprises
-- Datasets >100MB display a warning
-- Very large datasets (1GB+) may take time to prepare and download
-
-**Browser limits:** Most modern browsers handle multi-GB downloads, but performance varies. For very large datasets, consider:
-- Using the dataset directly from the `datasets/` folder
-- Compressing with external tools for better ratios
-- Splitting into multiple smaller datasets
-
-## Project Structure
+### Project Structure
 
 ```
 yolo_dataset_creator/
-├── server.py           # Flask backend
-├── static/
-│   ├── index.html      # Main UI
-│   ├── style.css       # Styles
-│   └── app.js          # Frontend logic
-├── datasets/           # Created datasets (gitignored)
-├── requirements.txt
-├── CLAUDE.md           # Development documentation
-└── README.md
+├── backend/                # FastAPI backend
+│   ├── main.py             # App entry, lifespan, routers
+│   ├── api/                # REST API routers
+│   ├── websocket/          # WebSocket endpoints
+│   ├── models/             # Pydantic request/response schemas
+│   ├── core/               # Config, events, exceptions
+│   ├── feeds/              # Feed manager, streaming
+│   ├── inference/          # Model loader, sessions
+│   ├── capture/            # Capture controller
+│   ├── dataset/            # Dataset manager
+│   ├── training/           # Training manager
+│   ├── notifications/      # Notification manager
+│   ├── persistence/        # Store interfaces + filesystem impl
+│   ├── Dockerfile          # Backend container image
+│   └── tests/              # Unit tests (pytest)
+├── frontend/               # Vue.js 3 SPA
+│   ├── src/
+│   │   ├── views/          # Scan, Dataset, Train, Model views
+│   │   ├── stores/         # Pinia state management
+│   │   ├── composables/    # useApi, useWebSocket, useVideoStream
+│   │   ├── components/     # Reusable Vue components
+│   │   └── types/          # TypeScript type definitions
+│   ├── Dockerfile          # Multi-stage build → nginx
+│   └── nginx.conf          # Reverse proxy config
+├── docker-compose.yml      # Frontend + backend + legacy
+├── docker-compose.gpu.yml  # NVIDIA GPU override
+├── requirements.txt        # Python dependencies
+├── datasets/               # Dataset storage (gitignored)
+├── models/                 # Trained models (gitignored)
+├── docs/                   # Architecture and guides
+└── tests/                  # E2E / integration tests
 ```
+
+## Documentation
+
+### Architecture
+
+- [Top-Level Architecture](docs/ARCHITECTURE.md) — System overview, data flows, subsystem interactions
+- [Product Specification](docs/SPEC.md) — Feature requirements, modes of operation, target hardware
+
+### Subsystem Deep Dives
+
+- [API Gateway](docs/architecture/api-gateway.md) — REST endpoints, WebSocket handlers, capture controller
+- [Feeds](docs/architecture/feeds.md) — Feed types, ring buffers, subscriptions, derived feeds
+- [Inference](docs/architecture/inference.md) — Model loading, inference sessions, output feeds
+- [Dataset](docs/architecture/dataset.md) — CRUD, annotations, review queue, file formats
+- [Training](docs/architecture/training.md) — Training runner, model registry, hyperparameters
+- [Notifications](docs/architecture/notifications.md) — Event types, WebSocket broadcast, toast/banner
+- [Persistence](docs/architecture/persistence.md) — Store interfaces, filesystem implementation, DI
+- [Frontend](docs/architecture/frontend.md) — Vue components, Pinia stores, composables
+- [Authentication](docs/architecture/authentication.md) — Auth & RBAC (planned)
+
+### Guides
+
+- [Implementing a Feed](docs/guides/guide-implementing-a-feed.md)
+- [Feed API Usage](docs/guides/guide-feed-api.md)
+- [Notifications API](docs/guides/guide-notifications-api.md)
+- [Sending Notifications](docs/guides/guide-sending-notifications.md)
+- [Implementing a Storage Backend](docs/guides/guide-implementing-a-storage-backend.md)
+- [Using Persistence](docs/guides/guide-using-persistence.md)
+
+## Docker Deployment
+
+The Docker setup uses three services:
+
+| Service | Image | Exposed Port | Purpose |
+|---------|-------|-------------|---------|
+| `frontend` | nginx 1.27 | 80 | Serves Vue SPA, reverse-proxies `/api` and `/ws` to backend |
+| `backend` | Python 3.12 | (internal) | FastAPI app, not exposed externally |
+| `legacy` | Python 3.12 | 5001 | Original Flask server (opt-in via `--profile legacy`) |
+
+Persistent data is stored in named Docker volumes:
+
+| Volume | Mount Point | Contents |
+|--------|------------|----------|
+| `ydc-datasets` | `/app/datasets` | Image datasets and labels |
+| `ydc-models` | `/app/models` | Trained model weights |
+| `ydc-runs` | `/app/runs` | Ultralytics training run outputs |
+
+All containers run as non-root users with dropped capabilities and no-new-privileges.
+
+## Configuration
+
+The backend uses environment variables with a `YDC_` prefix (powered by Pydantic Settings):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `YDC_DATA_DIR` | `datasets` | Dataset storage directory |
+| `YDC_MODELS_DIR` | `models` | Trained model storage directory |
+| `YDC_CORS_ORIGINS` | `["http://localhost:5173"]` | Allowed CORS origins |
+| `YDC_DEFAULT_MODEL_NAME` | `yolo11n` | Default YOLO model for inference |
+| `YDC_TRAINING_EPOCHS` | `100` | Default training epochs |
+| `YDC_FEED_STREAM_FPS` | `15.0` | WebSocket frame streaming FPS |
+
+See [`backend/core/config.py`](backend/core/config.py) for the full list.
+
+## Legacy Application
+
+The original Flask-based YOLO Dataset Creator (`server.py` + `static/`) is preserved and can be run standalone or via Docker:
+
+```bash
+# Standalone
+python server.py  # http://localhost:5001
+
+# Docker
+docker compose --profile legacy up
+```
+
+See [README-legacy.md](README-legacy.md) for the original documentation.
 
 ## License
 
