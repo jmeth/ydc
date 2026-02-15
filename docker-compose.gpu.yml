@@ -1,0 +1,16 @@
+# GPU override for YOLO Dataset Creator backend.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requires nvidia-container-toolkit to be installed on the host.
+
+services:
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
