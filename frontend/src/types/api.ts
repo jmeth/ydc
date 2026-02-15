@@ -189,6 +189,32 @@ export interface ManualCaptureResponse {
 
 // --- Training API ---
 
+/**
+ * Data augmentation overrides for YOLO training.
+ * All fields optional — omitted fields use ultralytics defaults.
+ */
+export interface AugmentationConfig {
+  // Color space
+  hsv_h?: number   // 0.0-1.0, default 0.015
+  hsv_s?: number   // 0.0-1.0, default 0.7
+  hsv_v?: number   // 0.0-1.0, default 0.4
+  // Geometric
+  degrees?: number     // 0-180, default 0.0
+  translate?: number   // 0.0-1.0, default 0.1
+  scale?: number       // 0.0-1.0, default 0.5
+  shear?: number       // -180 to 180, default 0.0
+  perspective?: number // 0.0-0.001, default 0.0
+  flipud?: number      // 0.0-1.0, default 0.0
+  fliplr?: number      // 0.0-1.0, default 0.5
+  bgr?: number         // 0.0-1.0, default 0.0
+  // Advanced
+  mosaic?: number      // 0.0-1.0, default 1.0
+  mixup?: number       // 0.0-1.0, default 0.0
+  copy_paste?: number  // 0.0-1.0, default 0.0
+  erasing?: number     // 0.0-0.9, default 0.4
+  auto_augment?: 'randaugment' | 'autoaugment' | 'augmix' | null
+}
+
 /** Response for training status. */
 export interface TrainingStatusResponse {
   job_id: string

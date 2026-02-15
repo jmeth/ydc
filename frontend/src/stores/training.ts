@@ -17,6 +17,7 @@ import type {
   ModelResponse,
   MessageResponse,
   DownloadPretrainedRequest,
+  AugmentationConfig,
 } from '@/types/api'
 
 interface TrainingProgress {
@@ -86,8 +87,22 @@ export const useTrainingStore = defineStore('training', {
       lr0?: number
       lrf?: number
       modelName?: string
+      augmentation?: AugmentationConfig
     }) {
       const { post } = useApi()
+
+      // Build augmentation payload — only include non-undefined fields
+      let augmentation: AugmentationConfig | undefined
+      if (config.augmentation) {
+        const filtered: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(config.augmentation)) {
+          if (v !== undefined && v !== null && v !== '') filtered[k] = v
+        }
+        if (Object.keys(filtered).length > 0) {
+          augmentation = filtered as AugmentationConfig
+        }
+      }
+
       const res = await post<TrainingStatusResponse>('/training/start', {
         dataset_name: config.datasetName,
         base_model: config.baseModel,
@@ -99,6 +114,7 @@ export const useTrainingStore = defineStore('training', {
         lr0: config.lr0,
         lrf: config.lrf,
         model_name: config.modelName,
+        augmentation: augmentation,
       })
       this._applyStatus(res)
     },

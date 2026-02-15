@@ -485,6 +485,245 @@ class TestRunTraining:
 
         await mgr.shutdown()
 
+    async def test_training_config_saved_to_model_dir(self):
+        """Successful training saves training_config.yaml in the model directory."""
+        import yaml
+
+        ms = _make_model_store()
+        mgr = TrainingManager(
+            model_store=ms,
+            dataset_store=_make_dataset_store(),
+            event_bus=_make_event_bus(),
+        )
+
+        with patch("ultralytics.YOLO") as mock_yolo_cls:
+            mock_model = MagicMock()
+            mock_yolo_cls.return_value = mock_model
+
+            mock_trainer = MagicMock()
+            mock_trainer.best = "/tmp/runs/best.pt"
+            mock_model.trainer = mock_trainer
+
+            mock_results = MagicMock()
+            mock_results.results_dict = {"metrics/mAP50(B)": 0.85}
+            mock_model.train.return_value = mock_results
+
+            aug = {"mosaic": 0.5, "fliplr": 0.0}
+            config = _make_config(augmentation=aug)
+            job = TrainingJob(
+                job_id="test-cfg-save",
+                config=config,
+                status="training",
+                total_epochs=5,
+                started_at=time.time(),
+            )
+
+            loop = asyncio.get_running_loop()
+            mgr._loop = loop
+
+            # Use a real temp dir so we can verify the YAML was written
+            import tempfile
+            with tempfile.TemporaryDirectory() as tmpdir:
+                model_dir = Path(tmpdir) / "test-model"
+                model_dir.mkdir()
+
+                # Make model_store.save return a ModelInfo pointing to our temp dir
+                ms.save = AsyncMock(return_value=ModelInfo(
+                    name="test-model",
+                    path=model_dir / "best.pt",
+                    base_model="yolo11n.pt",
+                    dataset_name="test-ds",
+                    epochs_completed=5,
+                    best_map50=0.85,
+                ))
+
+                with patch.object(Path, "exists", return_value=True):
+                    await loop.run_in_executor(
+                        None, mgr._run_training, job, Path("/tmp/data.yaml")
+                    )
+
+                # Verify training_config.yaml was written
+                config_path = model_dir / "training_config.yaml"
+                assert config_path.exists()
+
+                with open(config_path) as f:
+                    saved = yaml.safe_load(f)
+
+                assert saved["model"] == "yolo11n.pt"
+                assert saved["data"] == "test-ds"
+                assert saved["epochs"] == 5
+                assert saved["batch"] == 4
+                assert saved["imgsz"] == 320
+                assert saved["augmentation"]["mosaic"] == 0.5
+                assert saved["augmentation"]["fliplr"] == 0.0
+                assert saved["best_map50"] == 0.85
+
+        await mgr.shutdown()
+
+    async def test_training_config_saved_without_augmentation(self):
+        """Config YAML omits augmentation key when no overrides are set."""
+        import yaml
+
+        ms = _make_model_store()
+        mgr = TrainingManager(
+            model_store=ms,
+            dataset_store=_make_dataset_store(),
+            event_bus=_make_event_bus(),
+        )
+
+        with patch("ultralytics.YOLO") as mock_yolo_cls:
+            mock_model = MagicMock()
+            mock_yolo_cls.return_value = mock_model
+
+            mock_trainer = MagicMock()
+            mock_trainer.best = "/tmp/runs/best.pt"
+            mock_model.trainer = mock_trainer
+
+            mock_results = MagicMock()
+            mock_results.results_dict = {"metrics/mAP50(B)": 0.80}
+            mock_model.train.return_value = mock_results
+
+            config = _make_config()  # no augmentation
+            job = TrainingJob(
+                job_id="test-no-aug-save",
+                config=config,
+                status="training",
+                total_epochs=5,
+                started_at=time.time(),
+            )
+
+            loop = asyncio.get_running_loop()
+            mgr._loop = loop
+
+            import tempfile
+            with tempfile.TemporaryDirectory() as tmpdir:
+                model_dir = Path(tmpdir) / "test-model"
+                model_dir.mkdir()
+
+                ms.save = AsyncMock(return_value=ModelInfo(
+                    name="test-model",
+                    path=model_dir / "best.pt",
+                    base_model="yolo11n.pt",
+                    dataset_name="test-ds",
+                    epochs_completed=5,
+                    best_map50=0.80,
+                ))
+
+                with patch.object(Path, "exists", return_value=True):
+                    await loop.run_in_executor(
+                        None, mgr._run_training, job, Path("/tmp/data.yaml")
+                    )
+
+                config_path = model_dir / "training_config.yaml"
+                assert config_path.exists()
+
+                with open(config_path) as f:
+                    saved = yaml.safe_load(f)
+
+                assert "augmentation" not in saved
+                assert saved["epochs"] == 5
+
+        await mgr.shutdown()
+
+    async def test_augmentation_params_forwarded(self):
+        """Augmentation overrides are passed through to model.train()."""
+        ms = _make_model_store()
+        mgr = TrainingManager(
+            model_store=ms,
+            dataset_store=_make_dataset_store(),
+            event_bus=_make_event_bus(),
+        )
+
+        with patch("ultralytics.YOLO") as mock_yolo_cls:
+            mock_model = MagicMock()
+            mock_yolo_cls.return_value = mock_model
+
+            mock_trainer = MagicMock()
+            mock_trainer.best = "/tmp/runs/best.pt"
+            mock_model.trainer = mock_trainer
+
+            mock_results = MagicMock()
+            mock_results.results_dict = {"metrics/mAP50(B)": 0.80}
+            mock_model.train.return_value = mock_results
+
+            aug = {"mosaic": 0.5, "fliplr": 0.0, "hsv_h": 0.02, "degrees": 15.0}
+            config = _make_config(augmentation=aug)
+            job = TrainingJob(
+                job_id="test-aug",
+                config=config,
+                status="training",
+                total_epochs=5,
+                started_at=time.time(),
+            )
+
+            loop = asyncio.get_running_loop()
+            mgr._loop = loop
+
+            with patch.object(Path, "exists", return_value=True):
+                await loop.run_in_executor(
+                    None, mgr._run_training, job, Path("/tmp/data.yaml")
+                )
+
+            # Verify augmentation params were passed to model.train()
+            train_kwargs = mock_model.train.call_args[1]
+            assert train_kwargs["mosaic"] == 0.5
+            assert train_kwargs["fliplr"] == 0.0
+            assert train_kwargs["hsv_h"] == 0.02
+            assert train_kwargs["degrees"] == 15.0
+            # Standard params should still be present
+            assert train_kwargs["epochs"] == 5
+            assert train_kwargs["batch"] == 4
+
+        await mgr.shutdown()
+
+    async def test_no_augmentation_no_extra_params(self):
+        """Empty augmentation dict does not add extra params to model.train()."""
+        ms = _make_model_store()
+        mgr = TrainingManager(
+            model_store=ms,
+            dataset_store=_make_dataset_store(),
+            event_bus=_make_event_bus(),
+        )
+
+        with patch("ultralytics.YOLO") as mock_yolo_cls:
+            mock_model = MagicMock()
+            mock_yolo_cls.return_value = mock_model
+
+            mock_trainer = MagicMock()
+            mock_trainer.best = "/tmp/runs/best.pt"
+            mock_model.trainer = mock_trainer
+
+            mock_results = MagicMock()
+            mock_results.results_dict = {"metrics/mAP50(B)": 0.80}
+            mock_model.train.return_value = mock_results
+
+            config = _make_config()  # augmentation defaults to empty dict
+            job = TrainingJob(
+                job_id="test-no-aug",
+                config=config,
+                status="training",
+                total_epochs=5,
+                started_at=time.time(),
+            )
+
+            loop = asyncio.get_running_loop()
+            mgr._loop = loop
+
+            with patch.object(Path, "exists", return_value=True):
+                await loop.run_in_executor(
+                    None, mgr._run_training, job, Path("/tmp/data.yaml")
+                )
+
+            # Verify no augmentation keys are present
+            train_kwargs = mock_model.train.call_args[1]
+            assert "mosaic" not in train_kwargs
+            assert "fliplr" not in train_kwargs
+            assert "hsv_h" not in train_kwargs
+            # Standard params should still be present
+            assert "epochs" in train_kwargs
+
+        await mgr.shutdown()
+
     async def test_epoch_callback_updates_job(self):
         """The on_train_epoch_end callback updates job progress."""
         eb = _make_event_bus()
@@ -650,6 +889,7 @@ class TestTrainingConfig:
         assert config.batch_size == 16
         assert config.image_size == 640
         assert config.model_name == ""
+        assert config.augmentation == {}
 
     def test_custom_values(self):
         """Config accepts custom overrides."""
@@ -662,6 +902,13 @@ class TestTrainingConfig:
         assert config.base_model == "yolov8s.pt"
         assert config.epochs == 50
         assert config.batch_size == 8
+
+    def test_augmentation_overrides(self):
+        """Config stores augmentation overrides dict."""
+        aug = {"mosaic": 0.5, "fliplr": 0.0, "hsv_h": 0.02}
+        config = TrainingConfig(dataset_name="test", augmentation=aug)
+        assert config.augmentation == aug
+        assert config.augmentation["mosaic"] == 0.5
 
 
 # --- TrainingJob Tests ---

@@ -6,7 +6,98 @@ and trained model CRUD. Used by the training and models API routers
 for request validation and response serialization.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+class AugmentationConfig(BaseModel):
+    """
+    Data augmentation parameters passed to ultralytics YOLO training.
+
+    All fields are optional — omitted fields use ultralytics defaults.
+    See https://docs.ultralytics.com/guides/yolo-data-augmentation/
+    """
+
+    # Color space augmentations
+    hsv_h: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="HSV hue shift fraction (ultralytics default: 0.015)",
+    )
+    hsv_s: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="HSV saturation shift fraction (ultralytics default: 0.7)",
+    )
+    hsv_v: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="HSV value (brightness) shift fraction (ultralytics default: 0.4)",
+    )
+
+    # Geometric transformations
+    degrees: float | None = Field(
+        default=None, ge=0.0, le=180.0,
+        description="Random rotation range in degrees (ultralytics default: 0.0)",
+    )
+    translate: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Random horizontal/vertical shift fraction (ultralytics default: 0.1)",
+    )
+    scale: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Random scaling factor range (ultralytics default: 0.5)",
+    )
+    shear: float | None = Field(
+        default=None, ge=-180.0, le=180.0,
+        description="Random shear angle in degrees (ultralytics default: 0.0)",
+    )
+    perspective: float | None = Field(
+        default=None, ge=0.0, le=0.001,
+        description="Random perspective warp fraction (ultralytics default: 0.0)",
+    )
+    flipud: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Vertical flip probability (ultralytics default: 0.0)",
+    )
+    fliplr: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Horizontal flip probability (ultralytics default: 0.5)",
+    )
+    bgr: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="RGB-to-BGR channel swap probability (ultralytics default: 0.0)",
+    )
+
+    # Advanced augmentations
+    mosaic: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Mosaic augmentation probability — combines 4 images (ultralytics default: 1.0)",
+    )
+    mixup: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="MixUp augmentation probability — blends 2 images (ultralytics default: 0.0)",
+    )
+    copy_paste: float | None = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Copy-paste augmentation probability (ultralytics default: 0.0)",
+    )
+    erasing: float | None = Field(
+        default=None, ge=0.0, le=0.9,
+        description="Random erasing probability during classification (ultralytics default: 0.4)",
+    )
+    auto_augment: Literal["randaugment", "autoaugment", "augmix"] | None = Field(
+        default=None,
+        description="Automatic augmentation policy (ultralytics default: 'randaugment')",
+    )
+
+    def to_training_kwargs(self) -> dict:
+        """
+        Return a dict of only the non-None fields, suitable for
+        splatting into ultralytics model.train(**kwargs).
+
+        Returns:
+            Dict mapping augmentation parameter names to their values.
+        """
+        return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
 class StartTrainingRequest(BaseModel):
@@ -21,6 +112,10 @@ class StartTrainingRequest(BaseModel):
     lr0: float | None = Field(default=None, gt=0, description="Initial learning rate")
     lrf: float | None = Field(default=None, gt=0, description="Final learning rate factor")
     model_name: str | None = Field(default=None, description="Name for the resulting model (auto-generated if omitted)")
+    augmentation: AugmentationConfig | None = Field(
+        default=None,
+        description="Data augmentation overrides (omit to use ultralytics defaults)",
+    )
 
 
 class TrainingStatusResponse(BaseModel):

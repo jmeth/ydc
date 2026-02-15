@@ -52,6 +52,9 @@ class TrainingConfig:
         lr0: Initial learning rate.
         lrf: Final learning rate factor.
         model_name: Name for the saved model.
+        augmentation: Dict of augmentation param overrides to pass
+            to ultralytics model.train(). Keys are ultralytics arg names
+            (e.g. hsv_h, mosaic, fliplr). Empty dict means use defaults.
     """
 
     dataset_name: str
@@ -64,6 +67,7 @@ class TrainingConfig:
     lr0: float = 0.001
     lrf: float = 0.01
     model_name: str = ""
+    augmentation: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -283,18 +287,23 @@ class TrainingManager:
 
             model.add_callback("on_train_epoch_end", on_train_epoch_end)
 
+            # Build training kwargs, including any augmentation overrides
+            train_kwargs = {
+                "data": str(data_yaml_path),
+                "epochs": job.config.epochs,
+                "imgsz": job.config.image_size,
+                "batch": job.config.batch_size,
+                "patience": job.config.patience,
+                "freeze": job.config.freeze_layers,
+                "lr0": job.config.lr0,
+                "lrf": job.config.lrf,
+                "verbose": False,
+            }
+            if job.config.augmentation:
+                train_kwargs.update(job.config.augmentation)
+
             # Run training
-            results = model.train(
-                data=str(data_yaml_path),
-                epochs=job.config.epochs,
-                imgsz=job.config.image_size,
-                batch=job.config.batch_size,
-                patience=job.config.patience,
-                freeze=job.config.freeze_layers,
-                lr0=job.config.lr0,
-                lrf=job.config.lrf,
-                verbose=False,
-            )
+            results = model.train(**train_kwargs)
 
             # Training completed — save model
             job.status = "completed"
@@ -327,7 +336,10 @@ class TrainingManager:
                     ),
                     self._loop,
                 )
-                future.result(timeout=30)
+                model_info = future.result(timeout=30)
+
+                # Save training config YAML alongside the model for reference/reuse
+                self._save_training_config(job, model_info.path.parent, best_map50)
 
             self._publish_from_thread(TRAINING_COMPLETED, {
                 "job_id": job.job_id,
@@ -401,6 +413,59 @@ class TrainingManager:
         """
         if self._event_bus is not None:
             await self._event_bus.publish(event_type, data)
+
+    def _save_training_config(
+        self,
+        job: TrainingJob,
+        model_dir: Path,
+        best_map50: float | None,
+    ) -> None:
+        """
+        Save training configuration as YAML in the model directory.
+
+        Writes a training_config.yaml file alongside the model weights
+        containing all training parameters and augmentation settings
+        in a format compatible with ultralytics YOLO training args.
+
+        Args:
+            job: The completed TrainingJob with config to save.
+            model_dir: Directory where the model weights are stored.
+            best_map50: Best mAP@50 achieved during training, if available.
+        """
+        import yaml
+
+        cfg = job.config
+        config_dict: dict[str, Any] = {
+            # Model & dataset
+            "model": cfg.base_model,
+            "data": cfg.dataset_name,
+            "model_name": cfg.model_name,
+            # Training hyperparameters
+            "epochs": cfg.epochs,
+            "batch": cfg.batch_size,
+            "imgsz": cfg.image_size,
+            "patience": cfg.patience,
+            "freeze": cfg.freeze_layers,
+            "lr0": cfg.lr0,
+            "lrf": cfg.lrf,
+        }
+
+        # Add augmentation overrides (only those explicitly set)
+        if cfg.augmentation:
+            config_dict["augmentation"] = dict(cfg.augmentation)
+
+        # Add results metadata
+        if best_map50 is not None:
+            config_dict["best_map50"] = best_map50
+        config_dict["epochs_completed"] = job.current_epoch
+
+        config_path = model_dir / "training_config.yaml"
+        try:
+            with open(config_path, "w") as f:
+                yaml.safe_dump(config_dict, f, default_flow_style=False, sort_keys=False)
+            logger.info("Saved training config to %s", config_path)
+        except Exception:
+            logger.warning("Failed to save training config to %s", config_path, exc_info=True)
 
     async def shutdown(self) -> None:
         """

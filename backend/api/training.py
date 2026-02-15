@@ -106,6 +106,11 @@ async def start_training(request: StartTrainingRequest) -> TrainingStatusRespons
     """
     mgr = _get_manager()
 
+    # Convert augmentation config to a dict of non-None overrides
+    augmentation = {}
+    if request.augmentation is not None:
+        augmentation = request.augmentation.to_training_kwargs()
+
     config = TrainingConfig(
         dataset_name=request.dataset_name,
         base_model=request.base_model,
@@ -117,6 +122,7 @@ async def start_training(request: StartTrainingRequest) -> TrainingStatusRespons
         lr0=request.lr0 if request.lr0 is not None else settings.training_lr0,
         lrf=request.lrf if request.lrf is not None else settings.training_lrf,
         model_name=request.model_name or "",
+        augmentation=augmentation,
     )
 
     await mgr.start_training(config)

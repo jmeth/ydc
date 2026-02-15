@@ -12,6 +12,7 @@ import pytest
 
 from backend.api.training import set_training_manager
 from backend.core.exceptions import ConflictError, NotFoundError, ValidationError
+from backend.models.training import AugmentationConfig
 from backend.training.manager import TrainingConfig, TrainingJob, TrainingManager
 
 
@@ -182,6 +183,86 @@ class TestStartTraining:
         assert call_args.batch_size > 0
         assert call_args.image_size > 0
 
+    async def test_start_with_augmentation(self, client, training_manager):
+        """Augmentation config is passed through to TrainingConfig."""
+        job = _make_job()
+        training_manager.get_status.return_value = job
+
+        resp = await client.post(
+            "/api/training/start",
+            json={
+                "dataset_name": "test-ds",
+                "augmentation": {
+                    "mosaic": 0.5,
+                    "fliplr": 0.0,
+                    "hsv_h": 0.02,
+                    "degrees": 15.0,
+                },
+            },
+        )
+        assert resp.status_code == 201
+
+        call_args = training_manager.start_training.call_args[0][0]
+        assert call_args.augmentation == {
+            "mosaic": 0.5,
+            "fliplr": 0.0,
+            "hsv_h": 0.02,
+            "degrees": 15.0,
+        }
+
+    async def test_start_without_augmentation(self, client, training_manager):
+        """Omitting augmentation results in empty augmentation dict."""
+        job = _make_job()
+        training_manager.get_status.return_value = job
+
+        resp = await client.post(
+            "/api/training/start",
+            json={"dataset_name": "test-ds"},
+        )
+        assert resp.status_code == 201
+
+        call_args = training_manager.start_training.call_args[0][0]
+        assert call_args.augmentation == {}
+
+    async def test_start_augmentation_partial_fields(self, client, training_manager):
+        """Only specified augmentation fields are forwarded."""
+        job = _make_job()
+        training_manager.get_status.return_value = job
+
+        resp = await client.post(
+            "/api/training/start",
+            json={
+                "dataset_name": "test-ds",
+                "augmentation": {"mosaic": 0.0},
+            },
+        )
+        assert resp.status_code == 201
+
+        call_args = training_manager.start_training.call_args[0][0]
+        assert call_args.augmentation == {"mosaic": 0.0}
+
+    async def test_start_augmentation_validation(self, client, training_manager):
+        """Invalid augmentation values return 422."""
+        resp = await client.post(
+            "/api/training/start",
+            json={
+                "dataset_name": "test-ds",
+                "augmentation": {"hsv_h": 2.0},  # max is 1.0
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_start_augmentation_invalid_auto_augment(self, client, training_manager):
+        """Invalid auto_augment value returns 422."""
+        resp = await client.post(
+            "/api/training/start",
+            json={
+                "dataset_name": "test-ds",
+                "augmentation": {"auto_augment": "invalid_policy"},
+            },
+        )
+        assert resp.status_code == 422
+
 
 # --- POST /api/training/stop ---
 
@@ -292,3 +373,83 @@ class TestGetTrainingHistory:
         assert data["jobs"][0]["status"] == "completed"
         assert data["jobs"][1]["job_id"] == "job-2"
         assert data["jobs"][1]["status"] == "error"
+
+
+# --- AugmentationConfig Model Tests ---
+
+class TestAugmentationConfig:
+    """Tests for AugmentationConfig Pydantic model validation."""
+
+    def test_all_none_by_default(self):
+        """Empty config has all None fields."""
+        cfg = AugmentationConfig()
+        assert cfg.to_training_kwargs() == {}
+
+    def test_to_training_kwargs_filters_none(self):
+        """to_training_kwargs only returns non-None fields."""
+        cfg = AugmentationConfig(mosaic=0.5, fliplr=0.0, hsv_h=0.02)
+        result = cfg.to_training_kwargs()
+        assert result == {"mosaic": 0.5, "fliplr": 0.0, "hsv_h": 0.02}
+        assert "hsv_s" not in result
+
+    def test_color_space_bounds(self):
+        """Color space params validate 0.0-1.0 range."""
+        cfg = AugmentationConfig(hsv_h=0.0, hsv_s=1.0, hsv_v=0.5)
+        assert cfg.hsv_h == 0.0
+        assert cfg.hsv_s == 1.0
+
+        with pytest.raises(Exception):  # pydantic ValidationError
+            AugmentationConfig(hsv_h=1.5)
+
+    def test_geometric_bounds(self):
+        """Geometric params validate their respective ranges."""
+        cfg = AugmentationConfig(
+            degrees=90.0, translate=0.5, scale=0.8,
+            shear=45.0, perspective=0.0005,
+        )
+        assert cfg.degrees == 90.0
+        assert cfg.perspective == 0.0005
+
+        with pytest.raises(Exception):
+            AugmentationConfig(degrees=200.0)  # max 180
+
+        with pytest.raises(Exception):
+            AugmentationConfig(perspective=0.01)  # max 0.001
+
+    def test_flip_probabilities(self):
+        """Flip params validate 0.0-1.0 probability range."""
+        cfg = AugmentationConfig(flipud=1.0, fliplr=0.0)
+        assert cfg.flipud == 1.0
+        assert cfg.fliplr == 0.0
+
+        with pytest.raises(Exception):
+            AugmentationConfig(flipud=1.5)
+
+    def test_advanced_augmentation_bounds(self):
+        """Advanced augmentation params validate ranges."""
+        cfg = AugmentationConfig(mosaic=0.0, mixup=1.0, copy_paste=0.5, erasing=0.9)
+        assert cfg.mosaic == 0.0
+        assert cfg.erasing == 0.9
+
+        with pytest.raises(Exception):
+            AugmentationConfig(erasing=1.0)  # max 0.9
+
+    def test_auto_augment_valid_values(self):
+        """auto_augment accepts valid policy strings."""
+        for policy in ("randaugment", "autoaugment", "augmix"):
+            cfg = AugmentationConfig(auto_augment=policy)
+            assert cfg.auto_augment == policy
+
+    def test_auto_augment_invalid_value(self):
+        """auto_augment rejects unknown policies."""
+        with pytest.raises(Exception):
+            AugmentationConfig(auto_augment="invalid_policy")
+
+    def test_zero_values_included_in_kwargs(self):
+        """Zero is a valid override and should be included in kwargs."""
+        cfg = AugmentationConfig(mosaic=0.0, fliplr=0.0)
+        result = cfg.to_training_kwargs()
+        assert "mosaic" in result
+        assert result["mosaic"] == 0.0
+        assert "fliplr" in result
+        assert result["fliplr"] == 0.0
