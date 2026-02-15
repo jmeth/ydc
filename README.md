@@ -4,17 +4,29 @@ A browser-based tool for the full object detection workflow: live video scanning
 
 > **Note:** This project was vibecoded with [Claude](https://claude.ai) and is intended for **local/personal use only**. It has not been audited for security and should not be deployed on public networks.
 
-![screenshot](./assets/screenshot.png)
-
 ## Features
 
-**Scan Mode** — Point a camera, describe what to detect with text prompts, and YOLO-World finds it. Frames are captured automatically or on demand, complete with auto-generated annotations.
+**Feeds** - Create feeds from local webcams. Future capability to connect to remote feeds.
 
-**Dataset Mode** — Review, edit, and organize captured images and bounding boxes. Manage labels, assign train/val/test splits, import/export ZIP archives, and refine annotations before training.
+![screenshot](./assets/feeds.png)
 
-**Train Mode** — Fine-tune YOLO models on your datasets with configurable hyperparameters. Monitor training progress in real time via WebSocket updates.
+**Scan and Capture** — Point a camera, describe what to detect with text prompts, and YOLO-World finds it. Frames are captured automatically or on demand, complete with auto-generated annotations.
 
-**Model Mode** — Run your trained models against live feeds for inference without capture, or swap between base and fine-tuned models on the fly.
+![screenshot](./assets/scan.png)
+
+**Dataset Editing** — Review, edit, and organize captured images and bounding boxes. Manage labels, assign train/val/test splits, import/export ZIP archives, and refine annotations before training.
+
+![screenshot](./assets/dataset.png)
+
+![screenshot](./assets/annotate.png)
+
+**Training** — Fine-tune YOLO models on your datasets with configurable hyperparameters. Monitor training progress in real time via WebSocket updates.
+
+![screenshot](./assets/train.png)
+
+**Model Eval** — Run your trained models against live feeds for inference without capture, or swap between base and fine-tuned models on the fly.
+
+![screenshot](./assets/models.png)
 
 ### Additional Capabilities
 
