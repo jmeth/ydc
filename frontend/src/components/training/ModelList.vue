@@ -173,11 +173,13 @@ async function handleImportFile(event: Event) {
 
 .model-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   padding: 0.625rem 0;
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
+  gap: 0.375rem;
 }
 
 .model-row:last-child {
@@ -218,9 +220,15 @@ async function handleImportFile(event: Event) {
   color: var(--color-text-muted);
 }
 
+.model-info {
+  min-width: 0;
+  flex: 1 1 100%;
+}
+
 .model-actions {
   display: flex;
   gap: 0.375rem;
   flex-shrink: 0;
+  margin-left: auto;
 }
 </style>
