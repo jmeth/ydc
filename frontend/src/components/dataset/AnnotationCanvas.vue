@@ -5,7 +5,7 @@
  * Three modes:
  *   - view: Render annotations as colored bounding boxes
  *   - draw: Click-drag to create a new bounding box
- *   - edit: Select, drag to move, corner handles to resize
+ *   - edit: Select, drag to move, corner/edge handles to resize
  *
  * All annotations are in YOLO normalized format (cx, cy, w, h, 0-1),
  * converted to/from pixel coords for rendering. Color-coded by class_id.
@@ -16,6 +16,7 @@
  *   annotations - Array of Annotation objects
  *   mode - Interaction mode (view/draw/edit)
  *   activeClassId - Class ID for newly drawn annotations
+ *   selectedIndex - Currently selected annotation index
  *
  * Emits:
  *   update:annotations - When annotations change
@@ -43,6 +44,13 @@ const COLORS = [
   '#26c6da', '#ffca28', '#ec407a', '#8d6e63', '#78909c',
 ]
 
+/** Size of corner/edge resize handles in pixels. */
+const HANDLE_SIZE = 8
+const HANDLE_HALF = HANDLE_SIZE / 2
+
+/** Handle positions: corners and edge midpoints. */
+type HandleId = 'tl' | 'tr' | 'bl' | 'br' | 'tm' | 'bm' | 'ml' | 'mr'
+
 /** Get a color for a class ID (wraps around palette). */
 function colorFor(classId: number): string {
   return COLORS[classId % COLORS.length] ?? '#78909c'
@@ -67,9 +75,15 @@ const isDrawing = ref(false)
 const drawStart = ref({ x: 0, y: 0 })
 const drawEnd = ref({ x: 0, y: 0 })
 
-/** Dragging state for edit mode. */
+/** Dragging state for edit mode (move). */
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
+
+/** Resizing state for edit mode (handle drag). */
+const isResizing = ref(false)
+const activeHandle = ref<HandleId | null>(null)
+/** Anchor corner — the corner opposite to the handle being dragged. */
+const resizeAnchor = ref({ x: 0, y: 0 })
 
 /**
  * Convert normalized YOLO coords to pixel coords in the display area.
@@ -113,6 +127,30 @@ function toNormalized(x1: number, y1: number, x2: number, y2: number) {
 }
 
 /**
+ * Get the pixel positions of all 8 resize handles for a bounding box.
+ *
+ * @param x1 - Left pixel x
+ * @param y1 - Top pixel y
+ * @param x2 - Right pixel x
+ * @param y2 - Bottom pixel y
+ * @returns Record mapping HandleId to { x, y } center positions
+ */
+function getHandlePositions(x1: number, y1: number, x2: number, y2: number): Record<HandleId, { x: number; y: number }> {
+  const mx = (x1 + x2) / 2
+  const my = (y1 + y2) / 2
+  return {
+    tl: { x: x1, y: y1 },
+    tr: { x: x2, y: y1 },
+    bl: { x: x1, y: y2 },
+    br: { x: x2, y: y2 },
+    tm: { x: mx, y: y1 },
+    bm: { x: mx, y: y2 },
+    ml: { x: x1, y: my },
+    mr: { x: x2, y: my },
+  }
+}
+
+/**
  * Get mouse position relative to the container.
  *
  * @param event - Mouse event
@@ -144,7 +182,9 @@ function updateDisplayDimensions() {
   offsetY.value = (ch - displayHeight.value) / 2
 }
 
-/** Render all annotations and the in-progress drawing box on the canvas. */
+/**
+ * Render all annotations, handles, and the in-progress drawing box.
+ */
 function draw() {
   const canvas = canvasRef.value
   if (!canvas || !containerRef.value) return
@@ -167,15 +207,25 @@ function draw() {
     if (isSelected) {
       ctx.fillStyle = color + '22'
       ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+
+      // Draw resize handles
+      const handles = getHandlePositions(x1, y1, x2, y2)
+      for (const pos of Object.values(handles)) {
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(pos.x - HANDLE_HALF, pos.y - HANDLE_HALF, HANDLE_SIZE, HANDLE_SIZE)
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1.5
+        ctx.strokeRect(pos.x - HANDLE_HALF, pos.y - HANDLE_HALF, HANDLE_SIZE, HANDLE_SIZE)
+      }
     }
 
     // Label
     ctx.fillStyle = color
     const label = `${ann.classId}`
+    ctx.font = '11px system-ui'
     const tw = ctx.measureText(label).width + 8
     ctx.fillRect(x1, y1 - 16, tw, 16)
     ctx.fillStyle = '#121212'
-    ctx.font = '11px system-ui'
     ctx.fillText(label, x1 + 4, y1 - 4)
   })
 
@@ -193,6 +243,29 @@ function draw() {
   }
 }
 
+/**
+ * Test if a point is within a resize handle.
+ * Returns the HandleId if hit, or null.
+ *
+ * @param pos - Mouse position in container coords
+ * @param annIndex - Annotation index to test handles for
+ */
+function handleHitTest(pos: { x: number; y: number }, annIndex: number): HandleId | null {
+  const ann = props.annotations[annIndex]
+  if (!ann) return null
+
+  const { x1, y1, x2, y2 } = toPixel(ann)
+  const handles = getHandlePositions(x1, y1, x2, y2)
+  const hitRadius = HANDLE_HALF + 3 // a bit generous for easier grabbing
+
+  for (const [id, hpos] of Object.entries(handles)) {
+    if (Math.abs(pos.x - hpos.x) <= hitRadius && Math.abs(pos.y - hpos.y) <= hitRadius) {
+      return id as HandleId
+    }
+  }
+  return null
+}
+
 /** Find which annotation is under the mouse position. */
 function hitTest(pos: { x: number; y: number }): number {
   for (let i = props.annotations.length - 1; i >= 0; i--) {
@@ -206,7 +279,30 @@ function hitTest(pos: { x: number; y: number }): number {
   return -1
 }
 
+/**
+ * Compute the anchor point (opposite corner/edge) for a resize handle.
+ *
+ * @param handle - Which handle is being dragged
+ * @param x1 - Box left
+ * @param y1 - Box top
+ * @param x2 - Box right
+ * @param y2 - Box bottom
+ */
+function getAnchorForHandle(handle: HandleId, x1: number, y1: number, x2: number, y2: number) {
+  switch (handle) {
+    case 'tl': return { x: x2, y: y2 }
+    case 'tr': return { x: x1, y: y2 }
+    case 'bl': return { x: x2, y: y1 }
+    case 'br': return { x: x1, y: y1 }
+    case 'tm': return { x: (x1 + x2) / 2, y: y2 }
+    case 'bm': return { x: (x1 + x2) / 2, y: y1 }
+    case 'ml': return { x: x2, y: (y1 + y2) / 2 }
+    case 'mr': return { x: x1, y: (y1 + y2) / 2 }
+  }
+}
+
 function onMouseDown(event: MouseEvent) {
+  event.preventDefault() // prevent native image drag
   if (props.mode === 'view') return
   const pos = getMousePos(event)
 
@@ -215,6 +311,20 @@ function onMouseDown(event: MouseEvent) {
     drawStart.value = pos
     drawEnd.value = pos
   } else if (props.mode === 'edit') {
+    // First check if clicking a resize handle on the selected annotation
+    if (props.selectedIndex >= 0) {
+      const handle = handleHitTest(pos, props.selectedIndex)
+      if (handle) {
+        const ann = props.annotations[props.selectedIndex]!
+        const { x1, y1, x2, y2 } = toPixel(ann)
+        isResizing.value = true
+        activeHandle.value = handle
+        resizeAnchor.value = getAnchorForHandle(handle, x1, y1, x2, y2)
+        return
+      }
+    }
+
+    // Then check if clicking inside an annotation to move it
     const hit = hitTest(pos)
     const hitAnn = props.annotations[hit]
     if (hit >= 0 && hitAnn) {
@@ -229,11 +339,45 @@ function onMouseDown(event: MouseEvent) {
 }
 
 function onMouseMove(event: MouseEvent) {
+  event.preventDefault()
   const pos = getMousePos(event)
 
   if (isDrawing.value) {
     drawEnd.value = pos
     draw()
+  } else if (isResizing.value && props.selectedIndex >= 0 && activeHandle.value) {
+    // Resize: compute new box from anchor + current mouse position
+    const ann = props.annotations[props.selectedIndex]
+    if (!ann) return
+    const { x1, y1, x2, y2 } = toPixel(ann)
+    const handle = activeHandle.value
+    const anchor = resizeAnchor.value
+
+    // Determine new box edges based on which handle is dragged
+    let newX1 = x1, newY1 = y1, newX2 = x2, newY2 = y2
+    switch (handle) {
+      case 'tl': newX1 = pos.x; newY1 = pos.y; break
+      case 'tr': newX2 = pos.x; newY1 = pos.y; break
+      case 'bl': newX1 = pos.x; newY2 = pos.y; break
+      case 'br': newX2 = pos.x; newY2 = pos.y; break
+      case 'tm': newY1 = pos.y; break
+      case 'bm': newY2 = pos.y; break
+      case 'ml': newX1 = pos.x; break
+      case 'mr': newX2 = pos.x; break
+    }
+
+    // For corner handles, use anchor as the opposite corner
+    if (['tl', 'tr', 'bl', 'br'].includes(handle)) {
+      if (handle === 'tl') { newX2 = anchor.x; newY2 = anchor.y }
+      else if (handle === 'tr') { newX1 = anchor.x; newY2 = anchor.y }
+      else if (handle === 'bl') { newX2 = anchor.x; newY1 = anchor.y }
+      else if (handle === 'br') { newX1 = anchor.x; newY1 = anchor.y }
+    }
+
+    const norm = toNormalized(newX1, newY1, newX2, newY2)
+    const updated = [...props.annotations]
+    updated[props.selectedIndex] = { classId: ann.classId, ...norm }
+    emit('update:annotations', updated)
   } else if (isDragging.value && props.selectedIndex >= 0) {
     const ann = props.annotations[props.selectedIndex]
     if (!ann) return
@@ -246,7 +390,6 @@ function onMouseMove(event: MouseEvent) {
     const updated = [...props.annotations]
     updated[props.selectedIndex] = { classId: ann.classId, ...norm }
     emit('update:annotations', updated)
-    draw()
   }
 }
 
@@ -262,9 +405,10 @@ function onMouseUp() {
       }
       emit('update:annotations', [...props.annotations, newAnn])
     }
-    draw()
   }
   isDragging.value = false
+  isResizing.value = false
+  activeHandle.value = null
 }
 
 function onKeyDown(event: KeyboardEvent) {
@@ -278,6 +422,37 @@ function onKeyDown(event: KeyboardEvent) {
     emit('select', -1)
     isDrawing.value = false
   }
+}
+
+/**
+ * Get the CSS cursor for the current mouse position in edit mode.
+ * Shows resize cursors over handles, move cursor over selected box.
+ */
+function getCursorForPos(pos: { x: number; y: number }): string {
+  if (props.selectedIndex >= 0) {
+    const handle = handleHitTest(pos, props.selectedIndex)
+    if (handle) {
+      const cursorMap: Record<HandleId, string> = {
+        tl: 'nwse-resize', br: 'nwse-resize',
+        tr: 'nesw-resize', bl: 'nesw-resize',
+        tm: 'ns-resize', bm: 'ns-resize',
+        ml: 'ew-resize', mr: 'ew-resize',
+      }
+      return cursorMap[handle]
+    }
+  }
+
+  const hit = hitTest(pos)
+  if (hit >= 0) return 'move'
+  return 'default'
+}
+
+/** Update cursor based on mouse position during edit mode. */
+function updateCursor(event: MouseEvent) {
+  if (props.mode !== 'edit' || !containerRef.value) return
+  if (isDragging.value || isResizing.value) return // keep current cursor during drag
+  const pos = getMousePos(event)
+  containerRef.value.style.cursor = getCursorForPos(pos)
 }
 
 // Redraw when annotations or selection changes
@@ -310,7 +485,7 @@ onUnmounted(() => {
     class="annotation-canvas"
     :class="{ 'mode-draw': props.mode === 'draw', 'mode-edit': props.mode === 'edit' }"
     @mousedown="onMouseDown"
-    @mousemove="onMouseMove"
+    @mousemove="onMouseMove($event); updateCursor($event)"
     @mouseup="onMouseUp"
     @mouseleave="onMouseUp"
   >
@@ -319,6 +494,7 @@ onUnmounted(() => {
       :src="props.imageSrc"
       class="canvas-image"
       alt="Annotation target"
+      draggable="false"
       @load="onImageLoad"
     />
     <canvas ref="canvasRef" class="canvas-overlay"></canvas>
@@ -350,6 +526,7 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .canvas-overlay {
