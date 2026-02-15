@@ -14,6 +14,7 @@ from backend.feeds.base import BaseFeed
 from backend.feeds.camera import CameraFeed
 from backend.feeds.factory import FeedFactory
 from backend.feeds.models import FeedType
+from backend.feeds.rtsp import RTSPFeed
 
 
 def make_mock_capture(
@@ -201,10 +202,11 @@ class TestFeedFactory:
         assert isinstance(feed, CameraFeed)
         assert feed.source == "0"
 
-    def test_create_rtsp_not_supported(self):
-        """create with RTSP type raises ValueError."""
-        with pytest.raises(ValueError, match="not yet supported"):
-            FeedFactory.create(FeedType.RTSP, "rtsp://example.com/stream")
+    def test_create_rtsp(self):
+        """create with RTSP type returns an RTSPFeed."""
+        feed = FeedFactory.create(FeedType.RTSP, "rtsp://example.com/stream")
+        assert isinstance(feed, RTSPFeed)
+        assert feed.source == "rtsp://example.com/stream"
 
     def test_create_file_not_supported(self):
         """create with FILE type raises ValueError."""
